@@ -62,6 +62,9 @@ public final class MuseumCardStore: ObservableObject {
 
     @Published public private(set) var snapshot = Snapshot(version: 0, cards: [:])
 
+    /// The JSON file the cards live in.
+    public var fileLocation: URL { fileURL }
+
     private let fileURL: URL = {
         // `BLOOMING8_DATA_DIR` overrides the folder, for tests only.
         if let override = ProcessInfo.processInfo.environment["BLOOMING8_DATA_DIR"] {

@@ -134,7 +134,7 @@ struct RootView: View {
     }
 
     private func isLocalFolderSource(_ source: LibrarySource) -> Bool {
-        source == .localFolder || source == .browseFiles || source == .favorites
+        source == .localFolder || source == .browseFiles || source == .museumCards || source == .favorites
     }
 
     private var isLocalFolderSource: Bool { isLocalFolderSource(activeSource) }
@@ -160,6 +160,8 @@ struct RootView: View {
             GeneratedPane(settings: settings, controller: controller)
         case .browseFiles:
             FileBrowserView(settings: settings, controller: controller)
+        case .museumCards:
+            MuseumCardsView(settings: settings, controller: controller)
         default:
             HSplitView {
                 LibraryGrid(
@@ -356,7 +358,7 @@ struct RootView: View {
 
     private var isGridSource: Bool {
         switch activeSource {
-        case .currentPhoto, .generated: return false
+        case .currentPhoto, .generated, .museumCards: return false
         default: return true
         }
     }

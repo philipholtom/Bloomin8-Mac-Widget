@@ -51,8 +51,12 @@ struct MuseumCardEditor: View {
             Label("Museum card", systemImage: "text.below.photo")
                 .help("Shown on the CrowPanel display beside the frame")
         }
-        .onAppear(perform: load)
-        .onChange(of: path) { _ in load() }
+        .onAppear { load(path: path) }
+        // Uses the NEW path handed to this closure: reading `path` from the
+        // view inside it gave the previous card's path on this SDK, so
+        // clicking from one card to the next left the editor showing the
+        // card before it (and a Save would have written it under the new one).
+        .onChange(of: path) { newPath in load(path: newPath) }
     }
 
     private func field(_ label: String, text: Binding<String>, prompt: String) -> some View {
@@ -65,7 +69,7 @@ struct MuseumCardEditor: View {
         }
     }
 
-    private func load() {
+    private func load(path: String) {
         let stored = MuseumCardStore.shared.card(for: path) ?? MuseumCard()
         card = stored
         savedCard = stored

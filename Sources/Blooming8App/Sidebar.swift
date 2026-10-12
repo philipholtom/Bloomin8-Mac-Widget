@@ -7,6 +7,7 @@ struct Sidebar: View {
 
     @ObservedObject var settings: AppSettings
     @ObservedObject var controller: PhotoController
+    @ObservedObject private var cardStore = MuseumCardStore.shared
     @Binding var source: LibrarySource?
     /// Picks image files and uploads them into the named gallery.
     let onUpload: (String) -> Void
@@ -39,6 +40,7 @@ struct Sidebar: View {
                     if shouldShowLocalFolderRows {
                         row(.localFolder, isLocked: isLocalFolderLocked)
                         row(.browseFiles, isLocked: isLocalFolderLocked)
+                        row(.museumCards, badge: cardStore.snapshot.cards.count, isLocked: isLocalFolderLocked)
                         row(.favorites, badge: settings.favoriteImagePaths.count, isLocked: isLocalFolderLocked)
                     }
                     row(.applePhotos)
