@@ -19,11 +19,19 @@ public struct APODSource: TodayContentSource {
     public let todayButtonTitle = "Today's Picture"
 
     public func generateImage(settings: AppSettings) async throws -> Data {
+        try await generateImageAndCard(settings: settings).data
+    }
+
+    public func generateImageAndCard(settings: AppSettings) async throws -> GeneratedContent {
         try await render(try await fetchRandomAPOD())
     }
 
     /// The real picture of the day, as opposed to a random date's.
     public func generateTodayImage(settings: AppSettings) async throws -> Data {
+        try await generateTodayImageAndCard(settings: settings).data
+    }
+
+    public func generateTodayImageAndCard(settings: AppSettings) async throws -> GeneratedContent {
         let apod: APODResponse
         do {
             apod = try await fetchAPOD(dateCode: Self.dateCode(for: Date()))
@@ -37,7 +45,7 @@ public struct APODSource: TodayContentSource {
         return try await render(apod)
     }
 
-    private func render(_ apod: APODResponse) async throws -> Data {
+    private func render(_ apod: APODResponse) async throws -> GeneratedContent {
         guard let urlString = apod.hdurl, let imageURL = URL(string: urlString) else {
             throw ContentSourceError.message("No image URL in APOD response")
         }
@@ -50,17 +58,84 @@ public struct APODSource: TodayContentSource {
         else {
             throw ContentSourceError.message("Couldn't render APOD image")
         }
-        return jpeg
+        return GeneratedContent(data: jpeg, card: Self.museumCard(for: apod))
+    }
+
+    /// The museum card for a picture: its title, "NASA Astronomy Picture of the
+    /// Day" under it, the date and who made it on the next line, and the first
+    /// sentence or two of NASA's description as the notes.
+    private static func museumCard(for apod: APODResponse) -> MuseumCard {
+        var card = MuseumCard()
+        card.title = plainText(fromHTML: apod.title ?? "")
+        card.place = "NASA Astronomy Picture of the Day"
+
+        let parser = DateFormatter()
+        parser.locale = Locale(identifier: "en_US_POSIX")
+        parser.dateFormat = "yyyy-MM-dd"
+        if let date = parser.date(from: apod.date) {
+            let display = DateFormatter()
+            display.setLocalizedDateFormatFromTemplate("d MMMM yyyy")
+            card.date = display.string(from: date)
+        } else {
+            card.date = apod.date
+        }
+
+        card.camera = creditLine(from: apod.copyright ?? apod.credit)
+        // The display has three small lines for the notes, so about this much.
+        card.notes = leadSentences(of: plainText(fromHTML: apod.explanation), upTo: 150)
+        return card
+    }
+
+    /// "Image Credit & Copyright: Jean-Charles Cuillandre (CFHT)" → "Jean-Charles
+    /// Cuillandre (CFHT)": the label is dropped to save room, and anything long
+    /// is cut at a word.
+    static func creditLine(from html: String?) -> String {
+        var text = plainText(fromHTML: html ?? "")
+        text = text.replacingOccurrences(
+            of: "^(Image\\s+)?(Credit|Copyright)(\\s*(&|and)\\s*(Credit|Copyright))?\\s*:?\\s*",
+            with: "", options: [.regularExpression, .caseInsensitive]
+        )
+        return cutAtWord(text, upTo: 60)
+    }
+
+    /// Whole sentences from the start of `text` while they fit in `limit`
+    /// characters; if even the first doesn't fit, it's cut at a word with "…".
+    static func leadSentences(of text: String, upTo limit: Int) -> String {
+        let flat = text.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression).trimmingCharacters(in: .whitespaces)
+        guard flat.count > limit else { return flat }
+        guard let regex = try? NSRegularExpression(pattern: "[.!?][\"'”’)]?(?=\\s|$)") else { return cutAtWord(flat, upTo: limit) }
+        var end: String.Index?
+        for match in regex.matches(in: flat, range: NSRange(flat.startIndex..., in: flat)) {
+            guard let range = Range(match.range, in: flat) else { continue }
+            if flat.distance(from: flat.startIndex, to: range.upperBound) <= limit { end = range.upperBound } else { break }
+        }
+        if let end { return String(flat[..<end]) }
+        return cutAtWord(flat, upTo: limit)
+    }
+
+    private static func cutAtWord(_ text: String, upTo limit: Int) -> String {
+        guard text.count > limit else { return text }
+        var cut = String(text.prefix(limit))
+        if let space = cut.lastIndex(of: " ") { cut = String(cut[..<space]) }
+        // Don't leave a bracket open: drop from the last "(" if it never closes.
+        if cut.filter({ $0 == "(" }).count > cut.filter({ $0 == ")" }).count, let open = cut.lastIndex(of: "(") {
+            cut = String(cut[..<open]).trimmingCharacters(in: .whitespaces)
+        }
+        while let last = cut.last, ",;:-–—(".contains(last) { cut.removeLast() }
+        return cut + "…"
     }
 
     private struct APODResponse: Decodable {
         let date: String
         let explanation: String
+        let title: String?
+        let credit: String?
+        let copyright: String?
         let mediaType: String?
         let hdurl: String?
 
         private enum CodingKeys: String, CodingKey {
-            case date, explanation, hdurl
+            case date, explanation, hdurl, title, credit, copyright
             case mediaType = "media_type"
         }
     }
@@ -140,32 +215,16 @@ public struct APODSource: TodayContentSource {
         }
         text = text.replacingOccurrences(of: "<br\\s*/?>", with: " ", options: [.regularExpression, .caseInsensitive])
         text = text.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-        text = decodeHTMLEntities(text)
+        text = TextCleaning.decodeHTMLEntities(text)
         text = text.replacingOccurrences(of: "^\\s*Explanation:\\s*", with: "", options: [.regularExpression, .caseInsensitive])
         text = text.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
         // Links in the source leave stray spaces before punctuation ("nebula , stars").
         text = text.replacingOccurrences(of: "\\s+([,.;:!?])", with: "$1", options: .regularExpression)
+        // Same for brackets and apostrophes around a removed link: "( Ryugu )", "Japan 's".
+        text = text.replacingOccurrences(of: "\\(\\s+", with: "(", options: .regularExpression)
+        text = text.replacingOccurrences(of: "\\s+\\)", with: ")", options: .regularExpression)
+        text = text.replacingOccurrences(of: "\\s+(['’]s)\\b", with: "$1", options: .regularExpression)
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private static func decodeHTMLEntities(_ text: String) -> String {
-        var result = text
-        if let regex = try? NSRegularExpression(pattern: "&#(x[0-9a-fA-F]+|[0-9]+);") {
-            let matches = regex.matches(in: result, range: NSRange(result.startIndex..., in: result)).reversed()
-            for match in matches {
-                guard let whole = Range(match.range, in: result), let codeRange = Range(match.range(at: 1), in: result) else { continue }
-                let code = result[codeRange]
-                let value = code.hasPrefix("x") ? UInt32(code.dropFirst(), radix: 16) : UInt32(code, radix: 10)
-                if let value, let scalar = Unicode.Scalar(value) {
-                    result.replaceSubrange(whole, with: String(Character(scalar)))
-                }
-            }
-        }
-        let named = [("&nbsp;", " "), ("&quot;", "\""), ("&apos;", "'"), ("&lt;", "<"), ("&gt;", ">"), ("&amp;", "&")]
-        for (entity, replacement) in named {
-            result = result.replacingOccurrences(of: entity, with: replacement)
-        }
-        return result
     }
 
     private func composeFramed(image: NSImage, date: String, description: String) -> NSImage? {

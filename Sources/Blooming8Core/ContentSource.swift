@@ -11,6 +11,28 @@ public protocol ContentSource {
     /// whatever they already uploaded there rather than a new catch-all.
     var galleryName: String { get }
     func generateImage(settings: AppSettings) async throws -> Data
+    /// The same picture together with a museum card describing it (what it
+    /// is, when, who made it), for sources that know. Sources that don't just
+    /// get the default, which returns the picture with no card.
+    func generateImageAndCard(settings: AppSettings) async throws -> GeneratedContent
+}
+
+extension ContentSource {
+    public func generateImageAndCard(settings: AppSettings) async throws -> GeneratedContent {
+        GeneratedContent(data: try await generateImage(settings: settings), card: nil)
+    }
+}
+
+/// A generated picture, and the museum card that describes it if the source
+/// has one to offer.
+public struct GeneratedContent {
+    public var data: Data
+    public var card: MuseumCard?
+
+    public init(data: Data, card: MuseumCard? = nil) {
+        self.data = data
+        self.card = card
+    }
 }
 
 /// A source that can also produce "today's" item, not only a random one — for
@@ -19,6 +41,13 @@ public protocol ContentSource {
 public protocol TodayContentSource: ContentSource {
     var todayButtonTitle: String { get }
     func generateTodayImage(settings: AppSettings) async throws -> Data
+    func generateTodayImageAndCard(settings: AppSettings) async throws -> GeneratedContent
+}
+
+extension TodayContentSource {
+    public func generateTodayImageAndCard(settings: AppSettings) async throws -> GeneratedContent {
+        GeneratedContent(data: try await generateTodayImage(settings: settings), card: nil)
+    }
 }
 
 public enum ContentSourceError: LocalizedError {

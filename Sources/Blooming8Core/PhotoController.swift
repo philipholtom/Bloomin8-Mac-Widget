@@ -1097,12 +1097,13 @@ public final class PhotoController: ObservableObject {
 
             statusText = "Generating \(source.displayName)..."
             let usesToday = today && source is TodayContentSource
-            let imageData: Data
+            let generated: GeneratedContent
             if usesToday, let todaySource = source as? TodayContentSource {
-                imageData = try await todaySource.generateTodayImage(settings: settings)
+                generated = try await todaySource.generateTodayImageAndCard(settings: settings)
             } else {
-                imageData = try await source.generateImage(settings: settings)
+                generated = try await source.generateImageAndCard(settings: settings)
             }
+            let imageData = generated.data
 
             await client.ensureGallery(ip: settings.deviceIP, name: source.galleryName)
             // Today's item is named by date, so running it twice in a day
@@ -1217,6 +1218,9 @@ public final class PhotoController: ObservableObject {
         /// Metadata for the museum card, for candidates whose `fileURL`
         /// isn't a real file to read it from (Photos-library images).
         public var sourceMetadata: PhotoMetadata? = nil
+        /// A ready-made museum card, for generated pictures whose source
+        /// knows what they are (NASA's picture of the day).
+        public var museumCard: MuseumCard? = nil
     }
 
     /// `path|modified|size|crop|WxH` for a local file, hashed to 8 hex chars.
@@ -1349,11 +1353,14 @@ public final class PhotoController: ObservableObject {
         statusText = "Generating \(source.displayName) options…"
         var candidates: [LocalFolderCandidate] = []
         for index in 0..<3 {
-            guard let jpeg = try? await source.generateImage(settings: settings),
-                  let image = NSImage(data: jpeg)
+            guard let generated = try? await source.generateImageAndCard(settings: settings),
+                  let image = NSImage(data: generated.data)
             else { continue }
+            let jpeg = generated.data
             let name = "\(source.id)_\(Int(Date().timeIntervalSince1970 * 1000))_\(index)"
-            candidates.append(LocalFolderCandidate(fileURL: URL(fileURLWithPath: name), image: image, jpegData: jpeg, gallery: source.galleryName, isLocalFile: false))
+            var candidate = LocalFolderCandidate(fileURL: URL(fileURLWithPath: name), image: image, jpegData: jpeg, gallery: source.galleryName, isLocalFile: false)
+            candidate.museumCard = generated.card
+            candidates.append(candidate)
         }
         guard !candidates.isEmpty else {
             statusText = "Couldn't generate any \(source.displayName) options right now."
@@ -1368,12 +1375,15 @@ public final class PhotoController: ObservableObject {
     /// couldn't be fetched, leaving the existing candidates untouched.
     public func prepareTodayCandidate(source: TodayContentSource) async -> String? {
         do {
-            let jpeg = try await source.generateTodayImage(settings: settings)
+            let generated = try await source.generateTodayImageAndCard(settings: settings)
+            let jpeg = generated.data
             guard let image = NSImage(data: jpeg) else {
                 return "Couldn't read today's \(source.displayName)."
             }
             let name = "\(source.id)_today_\(Int(Date().timeIntervalSince1970 * 1000))"
-            localFolderCandidates = [LocalFolderCandidate(fileURL: URL(fileURLWithPath: name), image: image, jpegData: jpeg, gallery: source.galleryName, isLocalFile: false)]
+            var candidate = LocalFolderCandidate(fileURL: URL(fileURLWithPath: name), image: image, jpegData: jpeg, gallery: source.galleryName, isLocalFile: false)
+            candidate.museumCard = generated.card
+            localFolderCandidates = [candidate]
             statusText = ""
             return nil
         } catch {
@@ -1628,7 +1638,7 @@ public final class PhotoController: ObservableObject {
                         currentImagePath = existingPath
                         currentLocalSourceURL = candidate.isLocalFile ? candidate.fileURL : nil
                         currentGalleryOnDevice = gallery
-                        MuseumCardStore.shared.autoFill(path: existingPath, metadata: cardMetadata(for: candidate))
+                        fillMuseumCard(for: existingPath, candidate: candidate)
                         statusText = "✓ Already on the frame — displayed \(filename) without uploading again"
                         logActivity("Displayed \(filename) — already on the frame", success: true)
                         localFolderCandidates = []
@@ -1661,7 +1671,7 @@ public final class PhotoController: ObservableObject {
             currentImagePath = path
             currentLocalSourceURL = candidate.isLocalFile ? candidate.fileURL : nil
             currentGalleryOnDevice = gallery
-            MuseumCardStore.shared.autoFill(path: path, metadata: cardMetadata(for: candidate))
+            fillMuseumCard(for: path, candidate: candidate)
             statusText = "← /upload OK\n✓ Displayed \(filename)"
             logActivity("Uploaded and displayed \(filename)", success: true)
 
@@ -1676,6 +1686,17 @@ public final class PhotoController: ObservableObject {
     /// Where a candidate's museum-card metadata comes from: the file itself
     /// for local photos, or what was captured when a Photos-library image
     /// was prepared.
+    /// Files the candidate's museum card under its path on the frame: the
+    /// ready-made card a generated picture came with, or one built from the
+    /// photo's own metadata.
+    private func fillMuseumCard(for path: String, candidate: LocalFolderCandidate) {
+        if let card = candidate.museumCard {
+            MuseumCardStore.shared.autoFill(card, for: path)
+        } else {
+            MuseumCardStore.shared.autoFill(path: path, metadata: cardMetadata(for: candidate))
+        }
+    }
+
     private func cardMetadata(for candidate: LocalFolderCandidate) -> PhotoMetadata? {
         candidate.isLocalFile ? PhotoMetadata.read(from: candidate.fileURL) : candidate.sourceMetadata
     }

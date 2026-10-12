@@ -29,6 +29,22 @@ public struct MuseumCard: Codable, Equatable {
     public var isEmpty: Bool {
         [title, place, date, camera, notes].allSatisfy { $0.trimmingCharacters(in: .whitespaces).isEmpty }
     }
+
+    /// The card with HTML entities decoded ("&amp;" → "&") and stray
+    /// whitespace trimmed in every text field — the display would show the
+    /// raw "&amp;" otherwise.
+    public func normalized() -> MuseumCard {
+        func clean(_ text: String) -> String {
+            TextCleaning.decodeHTMLEntities(text).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        var card = self
+        card.title = clean(title)
+        card.place = clean(place)
+        card.date = clean(date)
+        card.camera = clean(camera)
+        card.notes = clean(notes)
+        return card
+    }
 }
 
 /// Every card, persisted as one JSON file in Application Support so the
@@ -47,6 +63,10 @@ public final class MuseumCardStore: ObservableObject {
     @Published public private(set) var snapshot = Snapshot(version: 0, cards: [:])
 
     private let fileURL: URL = {
+        // `BLOOMING8_DATA_DIR` overrides the folder, for tests only.
+        if let override = ProcessInfo.processInfo.environment["BLOOMING8_DATA_DIR"] {
+            return URL(fileURLWithPath: override, isDirectory: true).appendingPathComponent("museum_cards.json")
+        }
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
         return base.appendingPathComponent("Blooming8/museum_cards.json")
@@ -54,6 +74,31 @@ public final class MuseumCardStore: ObservableObject {
 
     private init() {
         reload()
+        tidyCards()
+    }
+
+    /// Cleans up cards already stored, once per launch: decodes stray HTML
+    /// entities everywhere, and — only for cards the user hasn't edited —
+    /// shortens or drops titles that were copied in from a picture's embedded
+    /// description (a 600-character block of AI-generator settings, say). Cards
+    /// that end up with nothing left are removed. Cards edited by hand keep
+    /// their wording.
+    @discardableResult
+    public func tidyCards() -> Int {
+        var changed = 0
+        for (path, card) in snapshot.cards {
+            var cleaned = card.normalized()
+            if !card.edited { cleaned.title = MuseumCardBuilder.cleanTitle(cleaned.title) }
+            guard cleaned != card else { continue }
+            changed += 1
+            if cleaned.isEmpty {
+                snapshot.cards.removeValue(forKey: path)
+            } else {
+                snapshot.cards[path] = cleaned
+            }
+        }
+        if changed > 0 { persist() }
+        return changed
     }
 
     /// Re-reads the file — the other product may have written to it.
@@ -75,7 +120,7 @@ public final class MuseumCardStore: ObservableObject {
         if card.isEmpty {
             snapshot.cards.removeValue(forKey: path)
         } else {
-            var edited = card
+            var edited = card.normalized()
             edited.edited = true
             snapshot.cards[path] = edited
         }
@@ -87,7 +132,7 @@ public final class MuseumCardStore: ObservableObject {
     public func autoFill(_ card: MuseumCard, for path: String) {
         reload()
         if snapshot.cards[path]?.edited == true || card.isEmpty { return }
-        snapshot.cards[path] = card
+        snapshot.cards[path] = card.normalized()
         persist()
     }
 
@@ -196,7 +241,7 @@ public struct PhotoMetadata: Sendable {
 public enum MuseumCardBuilder {
     public static func card(from meta: PhotoMetadata) async -> MuseumCard {
         var card = MuseumCard()
-        card.title = meta.title ?? ""
+        card.title = cleanTitle(meta.title)
         if let date = meta.dateTaken {
             let formatter = DateFormatter()
             formatter.setLocalizedDateFormatFromTemplate("d MMMM yyyy")
@@ -209,6 +254,30 @@ public enum MuseumCardBuilder {
             card.place = await placeName(latitude: lat, longitude: lon) ?? ""
         }
         return card
+    }
+
+    /// A title fit for the little display, from a picture's embedded description:
+    /// the first line only, capped at about 60 characters (cut at a word, with
+    /// "…"), and nothing at all if it's really an AI image generator's settings
+    /// ("Steps: 8, Sampler: …") or a prompt rather than a title.
+    public static func cleanTitle(_ raw: String?) -> String {
+        guard let raw else { return "" }
+        let decoded = TextCleaning.decodeHTMLEntities(raw)
+        let lowered = decoded.lowercased()
+        let generatorMarkers = ["negative prompt:", "steps:", "sampler:", "cfg scale", "guidance scale:", "seed:"]
+        if generatorMarkers.filter({ lowered.contains($0) }).count >= 2 { return "" }
+
+        let firstLine = decoded.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+        var title = firstLine.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+        let limit = 60
+        if title.count > limit {
+            title = String(title.prefix(limit))
+            if let space = title.lastIndex(of: " ") { title = String(title[..<space]) }
+            while let last = title.last, ",;:-–—(".contains(last) { title.removeLast() }
+            title += "…"
+        }
+        return title
     }
 
     /// "Landmark, City, Country" when Apple knows a point of interest there,
