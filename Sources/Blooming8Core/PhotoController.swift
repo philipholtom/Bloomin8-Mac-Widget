@@ -618,7 +618,12 @@ public final class PhotoController: ObservableObject {
 
     private func applyDeviceInfo(_ info: DeviceInfo) {
         deviceName = info.name
-        currentGalleryOnDevice = info.gallery
+        // The gallery of the photo actually on screen, read from its path —
+        // NOT the frame's own `gallery` field, which is the gallery it last
+        // played or uploaded into and was seen saying "Random" while showing
+        // a photo from "Favourites". Anything that asks "is a hidden gallery
+        // showing?" depends on this being right.
+        currentGalleryOnDevice = Self.galleryName(fromDevicePath: info.image) ?? info.gallery
         // Updates the path only, not previewImage/currentImageData — this
         // runs on every 60-second status poll (pollDeviceStatus), not just
         // explicit refresh/send actions, so the "On Frame" highlight in the
@@ -656,6 +661,14 @@ public final class PhotoController: ObservableObject {
     /// which move to a path with no known local origin, but shouldn't
     /// discard a local origin that's still correct just because the frame
     /// was re-queried.
+    /// "/gallerys/Family/1786_P.jpg" → "Family"; nil for anything else.
+    public static func galleryName(fromDevicePath path: String?) -> String? {
+        guard let path else { return nil }
+        let parts = path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+        guard parts.count >= 3, parts[0] == "gallerys", !parts[1].isEmpty else { return nil }
+        return parts[1]
+    }
+
     private func setCurrentImagePath(_ path: String) {
         if path != currentImagePath {
             currentLocalSourceURL = nil
@@ -840,6 +853,7 @@ public final class PhotoController: ObservableObject {
         do {
             try await withWakeRetry { try await client.show(ip: settings.deviceIP, imagePath: path) }
             setCurrentImagePath(path)
+            if let gallery = Self.galleryName(fromDevicePath: path) { currentGalleryOnDevice = gallery }
             statusText = "✓ Displayed \((path as NSString).lastPathComponent)"
             // Best-effort, same reasoning as showRandomPhoto: the send
             // itself already succeeded above, so a failed/slow thumbnail
@@ -1479,10 +1493,29 @@ public final class PhotoController: ObservableObject {
             statusText = "Scheduled send has no photo chosen."
             return
         }
-        if schedule.requireHiddenGalleryDisplayed && !isCurrentlyDisplayingHiddenGallery {
-            return
+        if schedule.requireHiddenGalleryDisplayed {
+            // Ask the frame what it is showing right now. The answer the app
+            // last heard can be hours old — the frame is asleep most of the
+            // day and photos get switched by hand, from the phone app, etc.
+            do {
+                let info = try await withWakeRetry { try await client.fetchDeviceInfo(ip: settings.deviceIP) }
+                applyDeviceInfo(info)
+            } catch {
+                statusText = "Scheduled send skipped: couldn't reach the frame to see what it's showing."
+                logActivity("Scheduled send skipped — couldn't reach the frame to check what it's showing", success: false)
+                return
+            }
+            guard isCurrentlyDisplayingHiddenGallery else {
+                let gallery = currentGalleryOnDevice ?? "an unknown gallery"
+                statusText = "Scheduled send skipped: the frame is showing a photo from \u{2018}\(gallery)\u{2019}, which isn't hidden."
+                logActivity("Scheduled send skipped — the frame is showing a photo from '\(gallery)', which isn't hidden", success: true)
+                return
+            }
         }
         await showImageAtPath(schedule.devicePath)
+        if currentImagePath == schedule.devicePath {
+            logActivity("Scheduled send: showed \((schedule.devicePath as NSString).lastPathComponent)", success: true)
+        }
     }
 
     /// Loads and prepares a specific image from a file path for display/upload.
