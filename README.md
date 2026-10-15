@@ -55,6 +55,12 @@ Since the frame's Wi-Fi radio sleeps to save battery, waking it requires Bluetoo
 
 No Xcode project is needed; this is a plain Swift Package Manager workspace.
 
+## Installing a release
+
+Download `Blooming8-<version>.dmg` from the [Releases](https://github.com/philipholtom/Blooming8-Mac-Widget/releases) page, open it, and drag both apps onto Applications. The apps aren't notarized by Apple, so the first launch needs right-click → Open (or `xattr -dr com.apple.quarantine /Applications/Blooming8*.app`).
+
+Maintainers: `./build_app.sh all && ./package_release.sh` produces the disk image in `dist/`.
+
 ## Building & running
 
 ```sh

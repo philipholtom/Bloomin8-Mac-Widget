@@ -10,12 +10,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var contentView: ContentView?
     private let settings = AppSettings()
     private lazy var controller = PhotoController(settings: settings)
+    /// Backup runners for the schedules the windowed app normally owns: they
+    /// act a minute after the set time and only if the app hasn't already
+    /// claimed that day's run (it isn't open overnight, and the widget is).
+    private var backupWatchers: [ScheduleWatcher] = []
     private var activityToken: NSObjectProtocol?
     private var awakeStatusCancellable: AnyCancellable?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         MuseumCardServer.shared.start(settings: settings, controller: controller)
+        startBackupSchedules()
 
         // A menu bar app has no visible windows, so macOS App Nap would
         // otherwise throttle its timers — this keeps the auto-random
@@ -140,5 +145,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func quitApp() {
         NSApp.terminate(nil)
+    }
+
+    private func startBackupSchedules() {
+        let settings = settings
+        let controller = controller
+        let content = ScheduleWatcher(
+            name: "scheduled-content", delay: 60,
+            timing: {
+                // The Photos "on this day" pick needs the app's Photos access.
+                guard let c = settings.storedActiveProfile()?.scheduledContent, c.isEnabled, !c.days.isEmpty,
+                      c.sourceID != ScheduledContent.onThisDayPhotosSourceID else { return nil }
+                return ScheduleTiming(days: c.days, timeMinutes: c.timeMinutes)
+            },
+            run: {
+                guard let c = settings.storedActiveProfile()?.scheduledContent, c.isEnabled else { return }
+                await controller.fireScheduledContent(c)
+            }
+        )
+        let send = ScheduleWatcher(
+            name: "scheduled-send", delay: 60,
+            timing: {
+                guard let s = settings.storedActiveProfile()?.scheduledSend, s.isEnabled,
+                      !s.devicePath.isEmpty, !s.days.isEmpty else { return nil }
+                return ScheduleTiming(days: s.days, timeMinutes: s.timeMinutes)
+            },
+            run: {
+                guard let s = settings.storedActiveProfile()?.scheduledSend, s.isEnabled else { return }
+                await controller.fireScheduledSend(s)
+            }
+        )
+        backupWatchers = [content, send]
+        backupWatchers.forEach { $0.start() }
     }
 }

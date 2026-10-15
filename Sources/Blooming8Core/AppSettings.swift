@@ -94,6 +94,17 @@ public final class AppSettings: ObservableObject {
         didSet { defaults.set(activeFrameProfileID.uuidString, forKey: "activeFrameProfileID") }
     }
 
+    /// The active frame's profile as currently stored on disk. A process
+    /// only sees its own edits live, so the always-on widget would otherwise
+    /// run schedules from whatever the windowed app had saved when the
+    /// widget launched.
+    public func storedActiveProfile() -> FrameProfile? {
+        guard let data = defaults.data(forKey: "frameProfiles"),
+              let profiles = try? JSONDecoder().decode([FrameProfile].self, from: data) else { return nil }
+        let activeID = defaults.string(forKey: "activeFrameProfileID").flatMap(UUID.init(uuidString:))
+        return profiles.first(where: { $0.id == activeID }) ?? profiles.first
+    }
+
     private var activeProfileIndex: Int {
         frameProfiles.firstIndex(where: { $0.id == activeFrameProfileID }) ?? 0
     }

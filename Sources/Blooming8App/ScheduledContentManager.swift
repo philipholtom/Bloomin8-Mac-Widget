@@ -4,15 +4,17 @@ import Foundation
 
 /// The clock-driven trigger for `AppSettings.scheduledContent` — a generated
 /// picture (e.g. today's NASA Photo of the Day) shown at a set time on chosen
-/// days. Lives in the windowed app only, for the same reason as
-/// `ScheduledSendManager`: a schedule should fire once, not once per process.
-/// If the Mac is asleep at the set time, the timer fires when it wakes.
+/// days. The windowed app is the primary runner (it alone can do the Photos
+/// "on this day" choice); the always-on widget backs it up a minute later for
+/// everything else, and a claim file makes sure each day runs once. If the Mac
+/// is asleep at the set time, it runs on wake.
 @MainActor
 final class ScheduledContentManager: ObservableObject {
     private let controller: PhotoController
     private let settings: AppSettings
-    private var timer: Timer?
+    private var watcher: ScheduleWatcher!
     private var cancellable: AnyCancellable?
+    private var settingsCancellable: AnyCancellable?
 
     /// When it will next fire, for display in Settings — nil if disabled or
     /// incomplete.
@@ -21,40 +23,27 @@ final class ScheduledContentManager: ObservableObject {
     init(controller: PhotoController, settings: AppSettings) {
         self.controller = controller
         self.settings = settings
-        // Pulled out of the DELIVERED profiles rather than re-read from
-        // `settings.scheduledContent`, and de-duplicated — see the long
-        // comment in `ScheduledSendManager.init` for why on both counts.
-        cancellable = Publishers.CombineLatest(settings.$frameProfiles, settings.$activeFrameProfileID)
-            .map { profiles, activeID in profiles.first(where: { $0.id == activeID })?.scheduledContent }
-            .removeDuplicates()
-            .sink { [weak self] schedule in
-                self?.reschedule(with: schedule)
+        watcher = ScheduleWatcher(
+            name: "scheduled-content",
+            timing: { [weak settings] in
+                guard let content = settings?.storedActiveProfile()?.scheduledContent,
+                      content.isEnabled, !content.days.isEmpty else { return nil }
+                return ScheduleTiming(days: content.days, timeMinutes: content.timeMinutes)
+            },
+            run: { [weak self, weak settings] in
+                guard let content = settings?.storedActiveProfile()?.scheduledContent, content.isEnabled else { return }
+                await self?.run(content)
             }
-    }
-
-    private func reschedule(with schedule: ScheduledContent?) {
-        timer?.invalidate()
-        timer = nil
-        guard let schedule,
-              schedule.isEnabled,
-              !schedule.days.isEmpty,
-              let fireDate = ScheduledSendManager.nextFireDate(days: schedule.days, timeMinutes: schedule.timeMinutes, after: Date())
-        else {
-            nextFireDate = nil
-            return
-        }
-        nextFireDate = fireDate
-        timer = Timer.scheduledTimer(withTimeInterval: fireDate.timeIntervalSinceNow, repeats: false) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                await self?.fire()
+        )
+        cancellable = watcher.$nextFireDate.sink { [weak self] in self?.nextFireDate = $0 }
+        watcher.start()
+        settingsCancellable = Publishers.CombineLatest(settings.$frameProfiles, settings.$activeFrameProfileID)
+            .map { _, _ in () }
+            .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
+            .sink { [weak self] in
+                guard let self else { return }
+                Task { await self.watcher.tick() }
             }
-        }
-    }
-
-    private func fire() async {
-        guard let schedule = settings.scheduledContent, schedule.isEnabled else { return }
-        await run(schedule)
-        reschedule(with: settings.scheduledContent)
     }
 
     /// Does what `schedule` says right now — also the "Run Now" button in

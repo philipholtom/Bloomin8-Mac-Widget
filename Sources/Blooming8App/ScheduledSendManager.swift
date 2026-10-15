@@ -2,110 +2,45 @@ import Blooming8Core
 import Combine
 import Foundation
 
-/// Owns the clock-driven trigger for `AppSettings.scheduledSend`,
-/// deliberately living in the windowed App target rather than
-/// `PhotoController` (Core) — unlike the existing auto-random photo, which
-/// both the Widget and the App happily run independently of each other, a
-/// scheduled send should only ever fire once. The windowed app is the
-/// process meant to own that responsibility, so this timer only runs here.
+/// The windowed app's runner for `AppSettings.scheduledSend`. The always-on
+/// widget watches the same schedule as a backup (a minute later); whichever
+/// gets there first claims the occurrence, so it runs once. Watching the
+/// real clock (not a one-shot `Timer`) means a Mac that was asleep at the
+/// set time still runs it on wake.
 @MainActor
 final class ScheduledSendManager: ObservableObject {
-    private let controller: PhotoController
-    private let settings: AppSettings
-    private var timer: Timer?
+    private let watcher: ScheduleWatcher
     private var cancellable: AnyCancellable?
 
     /// When the schedule will next fire, for display in Settings — nil if
-    /// disabled, incomplete (no photo/days chosen), or no future date could
-    /// be computed.
+    /// disabled or incomplete.
     @Published private(set) var nextFireDate: Date?
 
     init(controller: PhotoController, settings: AppSettings) {
-        self.controller = controller
-        self.settings = settings
-        // Combine's sink fires once immediately with the current value, so
-        // the schedule is live from launch without a separate initial call.
-        //
-        // `scheduledSend` is now a computed proxy into the active frame
-        // profile (see `AppSettings`), not its own `@Published` property, so
-        // this subscribes to `$frameProfiles`/`$activeFrameProfileID` — the
-        // genuinely `@Published` storage backing it — and pulls
-        // `scheduledSend` out of the DELIVERED profiles/activeID rather than
-        // re-reading `settings.scheduledSend`. `@Published` publishes from
-        // `willSet`, before the property's backing storage is actually
-        // updated, so a fresh read here would return the PREVIOUS value —
-        // every edit rescheduled against the edit before it, one step
-        // behind. That's what produced the originally observed bug: setting
-        // the time to 13:45 left the next-fire caption (and the real timer)
-        // still targeting 13:44.
-        //
-        // `.removeDuplicates()`: `frameProfiles` now backs every per-frame
-        // setting, not just `scheduledSend` — without this, editing an
-        // unrelated favorite or tab would re-trigger `reschedule` too
-        // (cheap here, just a Timer, but still pointless churn — see the
-        // same pattern's more serious network-flooding version fixed in
-        // `PhotoController.init`).
-        cancellable = Publishers.CombineLatest(settings.$frameProfiles, settings.$activeFrameProfileID)
-            .map { profiles, activeID in profiles.first(where: { $0.id == activeID })?.scheduledSend }
-            .removeDuplicates()
-            .sink { [weak self] schedule in
-                self?.reschedule(with: schedule)
+        watcher = ScheduleWatcher(
+            name: "scheduled-send",
+            timing: { [weak settings] in
+                guard let send = settings?.storedActiveProfile()?.scheduledSend,
+                      send.isEnabled, !send.devicePath.isEmpty, !send.days.isEmpty else { return nil }
+                return ScheduleTiming(days: send.days, timeMinutes: send.timeMinutes)
+            },
+            run: { [weak controller, weak settings] in
+                guard let send = settings?.storedActiveProfile()?.scheduledSend, send.isEnabled else { return }
+                await controller?.fireScheduledSend(send)
+            }
+        )
+        cancellable = watcher.$nextFireDate.sink { [weak self] in self?.nextFireDate = $0 }
+        watcher.start()
+        // Settings edits should show their new next-fire time straight away
+        // rather than at the next 30-second look.
+        settingsCancellable = Publishers.CombineLatest(settings.$frameProfiles, settings.$activeFrameProfileID)
+            .map { _, _ in () }
+            .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
+            .sink { [weak self] in
+                guard let self else { return }
+                Task { await self.watcher.tick() }
             }
     }
 
-    private func reschedule(with schedule: ScheduledSend?) {
-        timer?.invalidate()
-        timer = nil
-        guard let schedule,
-              schedule.isEnabled,
-              !schedule.devicePath.isEmpty,
-              !schedule.days.isEmpty,
-              let fireDate = Self.nextFireDate(for: schedule, after: Date())
-        else {
-            nextFireDate = nil
-            return
-        }
-        nextFireDate = fireDate
-        timer = Timer.scheduledTimer(withTimeInterval: fireDate.timeIntervalSinceNow, repeats: false) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                await self?.fire()
-            }
-        }
-    }
-
-    private func fire() async {
-        guard let schedule = settings.scheduledSend, schedule.isEnabled else { return }
-        await controller.fireScheduledSend(schedule)
-        // Whether or not the safety-net condition actually let it send this
-        // time, move on to the next matching day/time. Safe to re-read
-        // `settings.scheduledSend` fresh here — unlike the `.sink` above,
-        // this isn't running inside a `willSet` callback.
-        reschedule(with: settings.scheduledSend)
-    }
-
-    /// The next `Date` at or after `after` that matches one of `schedule`'s
-    /// days at its configured time. Checks today first, then up to a full
-    /// week ahead, so a single selected day still resolves correctly once
-    /// that day's time has already passed this week.
-    static func nextFireDate(for schedule: ScheduledSend, after: Date) -> Date? {
-        nextFireDate(days: schedule.days, timeMinutes: schedule.timeMinutes, after: after)
-    }
-
-    /// The same calculation for any "these days at this time" schedule —
-    /// shared with `ScheduledContentManager`.
-    static func nextFireDate(days: Set<Weekday>, timeMinutes: Int, after: Date) -> Date? {
-        let calendar = Calendar.current
-        for offset in 0...7 {
-            guard let candidateDay = calendar.date(byAdding: .day, value: offset, to: after) else { continue }
-            let weekdayRaw = calendar.component(.weekday, from: candidateDay)
-            guard let weekday = Weekday(rawValue: weekdayRaw), days.contains(weekday) else { continue }
-            var components = calendar.dateComponents([.year, .month, .day], from: candidateDay)
-            components.hour = timeMinutes / 60
-            components.minute = timeMinutes % 60
-            components.second = 0
-            guard let candidateFireDate = calendar.date(from: components), candidateFireDate > after else { continue }
-            return candidateFireDate
-        }
-        return nil
-    }
+    private var settingsCancellable: AnyCancellable?
 }

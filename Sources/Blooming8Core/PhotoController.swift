@@ -1143,6 +1143,13 @@ public final class PhotoController: ObservableObject {
             currentImageData = imageData
             setCurrentImagePath(path)
             currentGalleryOnDevice = source.galleryName
+            // The picture's museum card (NASA's title, date, credit and
+            // description), filed under where it now lives on the frame.
+            // This is the path the Today's NASA button, the scheduled send and
+            // Generate & Display all take; the picker route files its own.
+            if let card = generated.card {
+                MuseumCardStore.shared.autoFill(card, for: path)
+            }
             statusText = "Showed \(source.displayName)."
             logActivity("Showed \(source.displayName)", success: true)
 
