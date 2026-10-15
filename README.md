@@ -57,7 +57,13 @@ No Xcode project is needed; this is a plain Swift Package Manager workspace.
 
 ## Installing a release
 
-Download `Blooming8-<version>.dmg` from the [Releases](https://github.com/philipholtom/Blooming8-Mac-Widget/releases) page, open it, and drag both apps onto Applications. The apps aren't notarized by Apple, so the first launch needs right-click → Open (or `xattr -dr com.apple.quarantine /Applications/Blooming8*.app`).
+Download `Blooming8-<version>.dmg` from the [Releases](https://github.com/philipholtom/Blooming8-Mac-Widget/releases) page, open it, and drag both apps onto Applications. The apps aren't notarized by Apple, so macOS blocks the first launch. Run this once in Terminal (works on every macOS version):
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Blooming8.app /Applications/Blooming8Widget.app
+```
+
+Or try to open each app, then go to System Settings → Privacy & Security and click **Open Anyway**. (On macOS 14 and earlier, right-click → Open also works.) Requires macOS 13 or later, Apple Silicon or Intel.
 
 Maintainers: `./build_app.sh all && ./package_release.sh` produces the disk image in `dist/`.
 

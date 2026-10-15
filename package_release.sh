@@ -21,9 +21,11 @@ cat > "$STAGE/READ ME FIRST.txt" <<TXT
 Blooming8 $VERSION
 
 1. Drag Blooming8 and Blooming8Widget onto the Applications folder.
-2. These apps aren't notarized by Apple, so the first time you open each one,
-   right-click it in Applications and choose Open, then confirm.
-   (Or run:  xattr -dr com.apple.quarantine /Applications/Blooming8*.app )
+2. These apps aren't notarized by Apple, so macOS will block the first launch.
+   Either run this once in Terminal (works on every macOS version):
+       xattr -dr com.apple.quarantine /Applications/Blooming8.app /Applications/Blooming8Widget.app
+   or try to open each app, then go to System Settings > Privacy & Security
+   and click "Open Anyway". (On macOS 14 and earlier, right-click > Open also works.)
 3. Enter your frame's IP address in Settings.
 TXT
 
