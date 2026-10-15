@@ -86,7 +86,16 @@ public final class PhotoController: ObservableObject {
     /// low-battery behaviour matters more than staying awake.
     private static let keepAwakeMinimumBattery = 15
 
+    /// Looks at the wall clock every 30 seconds (and on wake) rather than
+    /// being a one-shot timer, because a one-shot `Timer` doesn't count the
+    /// time the Mac spends asleep — see `ScheduleWatcher`.
     private var autoRandomTimer: Timer?
+    private var autoRandomWakeObserver: NSObjectProtocol?
+    /// Daily occurrences at or before this are ignored: set when the setting
+    /// is edited so changing the time to one already passed doesn't fire.
+    private var autoRandomBaseline: Date = .distantPast
+    private var autoRandomHasStarted = false
+    private var autoRandomRunning = false
     private var autoRandomCancellable: AnyCancellable?
     private var statusPollTimer: Timer?
     private var statusPollCancellable: AnyCancellable?
@@ -266,38 +275,66 @@ public final class PhotoController: ObservableObject {
     private func updateAutoRandomSchedule() {
         autoRandomTimer?.invalidate()
         autoRandomTimer = nil
+        if let observer = autoRandomWakeObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+            autoRandomWakeObserver = nil
+        }
+        // The first call is launch: a daily change missed while the app
+        // wasn't running may still catch up. Later calls are edits.
+        autoRandomBaseline = autoRandomHasStarted ? Date() : .distantPast
+        autoRandomHasStarted = true
         guard settings.autoRandomEnabled, !settings.deviceIP.isEmpty else {
             nextAutoRandomFireDate = nil
             return
         }
-        scheduleNextAutoRandom()
-    }
-
-    private func scheduleNextAutoRandom() {
-        let interval: TimeInterval = settings.autoRandomInterval == .hourly
-            ? 3600
-            : secondsUntilNextDailyFire()
-        nextAutoRandomFireDate = Date().addingTimeInterval(interval)
-        autoRandomTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                await self?.showRandomPhoto()
-                self?.scheduleNextAutoRandom()
+        nextAutoRandomFireDate = settings.autoRandomInterval == .hourly
+            ? Date().addingTimeInterval(3600)
+            : dailyTiming.next(after: Date())
+        autoRandomTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in await self?.autoRandomTick() }
+        }
+        autoRandomWakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            // Let networking come back before acting.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
+                Task { @MainActor [weak self] in await self?.autoRandomTick() }
             }
         }
+        Task { await autoRandomTick() }
     }
 
-    private func secondsUntilNextDailyFire() -> TimeInterval {
-        let calendar = Calendar.current
-        let now = Date()
-        var components = calendar.dateComponents([.year, .month, .day], from: now)
-        components.hour = settings.autoRandomDailyMinute / 60
-        components.minute = settings.autoRandomDailyMinute % 60
-        components.second = 0
-        var fireDate = calendar.date(from: components) ?? now
-        if fireDate <= now {
-            fireDate = calendar.date(byAdding: .day, value: 1, to: fireDate) ?? now.addingTimeInterval(86400)
+    private var dailyTiming: ScheduleTiming {
+        ScheduleTiming(days: Set(Weekday.allCases), timeMinutes: settings.autoRandomDailyMinute)
+    }
+
+    /// Runs the random photo if it's due by the real clock. Hourly: an hour
+    /// after the last one (or on wake, if that hour passed while asleep).
+    /// Daily: at the set time, or on wake if it was missed by under 6 hours —
+    /// claimed through `ScheduleClaim` so the widget and the windowed app,
+    /// which each run this, don't both change the photo.
+    func autoRandomTick(now: Date = Date()) async {
+        guard settings.autoRandomEnabled, !settings.deviceIP.isEmpty, !autoRandomRunning else { return }
+        if settings.autoRandomInterval == .hourly {
+            guard let next = nextAutoRandomFireDate, now >= next else { return }
+        } else {
+            let timing = dailyTiming
+            nextAutoRandomFireDate = nextAutoRandomFireDate ?? timing.next(after: now)
+            guard let due = timing.previous(atOrBefore: now),
+                  due > autoRandomBaseline,
+                  now.timeIntervalSince(due) <= 6 * 3600,
+                  ScheduleClaim.claim("auto-random-\(settings.activeFrameProfileID.uuidString)", occurrence: due)
+            else {
+                if let next = nextAutoRandomFireDate, now >= next { nextAutoRandomFireDate = timing.next(after: now) }
+                return
+            }
         }
-        return fireDate.timeIntervalSince(now)
+        autoRandomRunning = true
+        await showRandomPhoto()
+        autoRandomRunning = false
+        nextAutoRandomFireDate = settings.autoRandomInterval == .hourly
+            ? Date().addingTimeInterval(3600)
+            : dailyTiming.next(after: Date())
     }
 
     /// Every gallery name that's currently selectable for randomization: ones
