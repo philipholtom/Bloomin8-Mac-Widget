@@ -1,0 +1,53 @@
+name: Smoke-test release
+
+# Manual only: downloads a published release DMG, installs the apps and checks
+# they launch and stay running on each macOS version. Doesn't test the frame,
+# Bluetooth, Photos, or Gatekeeper's first-launch prompt.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to test (blank = latest)
+        required: false
+
+jobs:
+  smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Download the release DMG
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir dl
+          gh release download ${{ inputs.tag }} --repo "$GITHUB_REPOSITORY" --pattern '*.dmg' --dir dl
+          ls -l dl
+      - name: Mount and install
+        run: |
+          hdiutil attach dl/*.dmg -mountpoint /Volumes/Blooming8 -nobrowse -quiet
+          cp -R /Volumes/Blooming8/Blooming8.app /Volumes/Blooming8/Blooming8Widget.app /Applications/
+          hdiutil detach /Volumes/Blooming8 -quiet
+      - name: Check signature and architectures
+        run: |
+          for app in Blooming8 Blooming8Widget; do
+            codesign --verify --strict /Applications/$app.app
+            lipo -archs /Applications/$app.app/Contents/MacOS/*
+            otool -L /Applications/$app.app/Contents/MacOS/* | grep -v -E '/usr/lib|/System' | tail -n +2 || true
+          done
+      - name: Launch and confirm both stay running
+        run: |
+          sw_vers
+          /Applications/Blooming8Widget.app/Contents/MacOS/Blooming8Widget > widget.log 2>&1 &
+          /Applications/Blooming8.app/Contents/MacOS/Blooming8App > app.log 2>&1 &
+          sleep 25
+          status=0
+          for p in Blooming8Widget Blooming8App; do
+            if pgrep -x $p >/dev/null; then echo "OK: $p still running"; else echo "FAIL: $p exited"; status=1; fi
+          done
+          echo "--- widget.log"; cat widget.log
+          echo "--- app.log"; cat app.log
+          ls ~/Library/Logs/DiagnosticReports 2>/dev/null | grep -i blooming || true
+          exit $status
