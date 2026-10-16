@@ -51,8 +51,10 @@ struct CurrentPhotoPane: View {
                 }
                 .frame(minWidth: 700)
 
+                // Stacked (narrow window): keep the photo at its side-by-side
+                // size instead of stretching to the full window width.
                 VStack(spacing: 22) {
-                    photoColumn
+                    photoColumn.frame(maxWidth: 460)
                     cardsColumn
                 }
             }

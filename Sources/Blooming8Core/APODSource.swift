@@ -31,18 +31,16 @@ public struct APODSource: TodayContentSource {
         try await generateTodayImageAndCard(settings: settings).data
     }
 
+    /// Today's picture — or, when NASA's entry for today is a video or isn't
+    /// up yet, the most recent earlier one that is an image (the framed image
+    /// carries its own date, so it's clear which day it's from).
     public func generateTodayImageAndCard(settings: AppSettings) async throws -> GeneratedContent {
-        let apod: APODResponse
-        do {
-            apod = try await fetchAPOD(dateCode: Self.dateCode(for: Date()))
-        } catch {
-            // NASA publishes each day's entry just after midnight US Eastern.
-            throw ContentSourceError.message("Today's NASA picture isn't available yet — try again in a little while.")
+        for daysBack in 0...7 {
+            let day = Calendar.current.date(byAdding: .day, value: -daysBack, to: Date()) ?? Date()
+            guard let apod = try? await fetchAPOD(dateCode: Self.dateCode(for: day)), Self.isUsableImage(apod) else { continue }
+            return try await render(apod)
         }
-        guard Self.isUsableImage(apod) else {
-            throw ContentSourceError.message("Today's NASA picture is a video, so there's no image to show. Try a random one instead.")
-        }
-        return try await render(apod)
+        throw ContentSourceError.message("Couldn't find a recent NASA picture of the day with an image. Try a random one instead.")
     }
 
     private func render(_ apod: APODResponse) async throws -> GeneratedContent {
