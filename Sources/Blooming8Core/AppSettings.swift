@@ -375,6 +375,14 @@ public final class AppSettings: ObservableObject {
         didSet { defaults.set(useTouchIDForLocks, forKey: "useTouchIDForLocks") }
     }
 
+    /// Whether the museum-card server (port 8738, for a CrowPanel display) is
+    /// running. On by default; people without a CrowPanel can turn it off.
+    /// Both products read this from the shared defaults, so one switch covers
+    /// the app and the widget.
+    @Published public var cardServerEnabled: Bool {
+        didSet { defaults.set(cardServerEnabled, forKey: "cardServerEnabled") }
+    }
+
     public convenience init() {
         self.init(defaults: UserDefaults(suiteName: AppSettings.suiteName) ?? .standard)
     }
@@ -467,6 +475,7 @@ public final class AppSettings: ObservableObject {
             localFolderPasswordHash = nil
         }
         useTouchIDForLocks = defaults.bool(forKey: "useTouchIDForLocks")
+        cardServerEnabled = defaults.object(forKey: "cardServerEnabled") as? Bool ?? true
 
         // `frameProfiles`'s own didSet does NOT fire for the assignment
         // above: Swift skips property observers when a property is set

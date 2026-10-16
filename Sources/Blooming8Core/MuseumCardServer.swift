@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import Network
 
 /// Serves the museum cards to the CrowPanel e-paper display over the local
@@ -34,10 +35,38 @@ public final class MuseumCardServer {
 
     private init() {}
 
+    private var syncTimer: Timer?
+    private var enabledCancellable: AnyCancellable?
+
+    /// Starts watching the "card server" setting and serves while it's on.
+    /// The setting is re-read from the shared defaults every few seconds, so
+    /// switching it off in the app also stops the widget's server.
     public func start(settings: AppSettings, controller: PhotoController) {
         self.settings = settings
         self.controller = controller
-        guard listener == nil else { return }
+        guard syncTimer == nil else { return }
+        syncTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
+            Task { @MainActor in MuseumCardServer.shared.sync() }
+        }
+        enabledCancellable = settings.$cardServerEnabled.sink { _ in
+            // `@Published` publishes before the value lands in the defaults.
+            DispatchQueue.main.async { MuseumCardServer.shared.sync() }
+        }
+        sync()
+    }
+
+    private func sync() {
+        let defaults = UserDefaults(suiteName: AppSettings.suiteName) ?? .standard
+        let enabled = defaults.object(forKey: "cardServerEnabled") as? Bool ?? true
+        if enabled, listener == nil {
+            listen()
+        } else if !enabled, let running = listener {
+            running.cancel()
+            listener = nil
+        }
+    }
+
+    private func listen() {
         do {
             let params = NWParameters.tcp
             params.allowLocalEndpointReuse = true

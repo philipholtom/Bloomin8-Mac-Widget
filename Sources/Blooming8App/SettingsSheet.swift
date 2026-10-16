@@ -183,6 +183,12 @@ struct SettingsSheet: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                Section("Museum card display") {
+                    HStack {
+                        Toggle("Serve museum cards to a CrowPanel display", isOn: $settings.cardServerEnabled)
+                        InfoButton("Shares the photo labels on your local network (port 8738) for the CrowPanel e-paper display. Turn this off if you don't have one — cards are still kept, nothing else is affected.")
+                    }
+                }
                     case .content:
                 Section("Photo of the Day") {
                     TextField("NASA API key", text: $nasaKeyDraft, prompt: Text("Using the shared demo key"))

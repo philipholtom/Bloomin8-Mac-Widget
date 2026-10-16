@@ -21,10 +21,18 @@ public struct MarsRoverSource: ContentSource {
     private struct RawImage: Decodable {
         let sol: Int
         let imageFiles: ImageFiles
+        let title: String?
+        let caption: String?
+        let site: Int?
+        let dateTakenUTC: String?
+        let dateTakenMars: String?
+        let credit: String?
 
         enum CodingKeys: String, CodingKey {
-            case sol
+            case sol, title, caption, site, credit
             case imageFiles = "image_files"
+            case dateTakenUTC = "date_taken_utc"
+            case dateTakenMars = "date_taken_mars"
         }
 
         struct ImageFiles: Decodable {
@@ -46,6 +54,10 @@ public struct MarsRoverSource: ContentSource {
     private static let rover = "mars2020"
 
     public func generateImage(settings: AppSettings) async throws -> Data {
+        try await generateImageAndCard(settings: settings).data
+    }
+
+    public func generateImageAndCard(settings: AppSettings) async throws -> GeneratedContent {
         var components = URLComponents(string: "https://mars.nasa.gov/rss/api/")!
         components.queryItems = [
             URLQueryItem(name: "feed", value: "raw_images"),
@@ -86,6 +98,47 @@ public struct MarsRoverSource: ContentSource {
         guard let finalImage, let jpeg = ImageCanvas.jpegData(finalImage) else {
             throw ContentSourceError.message("Couldn't render the Mars rover image")
         }
-        return jpeg
+        return GeneratedContent(data: jpeg, card: Self.museumCard(for: picked))
+    }
+
+    /// The museum card for a raw image: rover and sol as the title, where and
+    /// when it was taken, which camera took it, and what that camera is for.
+    private static func museumCard(for image: RawImage) -> MuseumCard {
+        var card = MuseumCard()
+        card.title = "Perseverance rover · Sol \(image.sol)"
+        card.place = image.site.map { "Mars · Site \($0)" } ?? "Mars"
+
+        // Earth date: "2026-10-15T21:26:25.500" (UTC) → "15 Oct 2026".
+        if let utc = image.dateTakenUTC, let day = utc.split(separator: "T").first {
+            let parser = DateFormatter()
+            parser.locale = Locale(identifier: "en_US_POSIX")
+            parser.dateFormat = "yyyy-MM-dd"
+            parser.timeZone = TimeZone(identifier: "UTC")
+            if let date = parser.date(from: String(day)) {
+                let display = DateFormatter()
+                display.setLocalizedDateFormatFromTemplate("d MMM yyyy")
+                display.timeZone = TimeZone(identifier: "UTC")
+                card.date = display.string(from: date)
+            }
+        }
+
+        // "Mars Perseverance Sol 2010: Right Navigation Camera (Navcam)" → the part after the colon.
+        if let title = image.title, let colon = title.firstIndex(of: ":") {
+            card.camera = String(title[title.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+        }
+
+        var notes: [String] = []
+        // "Sol-02010M10:34:02.514" → "10:34 local Mars time".
+        if let mars = image.dateTakenMars, let time = mars.split(separator: "M").last, time.count >= 5 {
+            notes.append("Taken at \(time.prefix(5)) local Mars time.")
+        }
+        // The caption's camera description, e.g. "The camera is located high
+        // on the rover's mast and aids in driving."
+        if let caption = image.caption,
+           let range = caption.range(of: "The camera[^.]*\\.", options: .regularExpression) {
+            notes.append(String(caption[range]))
+        }
+        card.notes = APODSource.leadSentences(of: notes.joined(separator: " "), upTo: 150)
+        return card.normalized()
     }
 }
