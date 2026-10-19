@@ -227,7 +227,22 @@ public final class PhotoController: ObservableObject {
             keepAwakeFailures = 0
         } catch {
             keepAwakeFailures += 1
-            if keepAwakeFailures >= 3 {
+            // The frame wakes by itself at the top of each hour for its
+            // scheduled pull and then shuts down whatever the keep-alive
+            // says (seen in its log: "Initiate pull request … Shutdown" a
+            // second or two apart). Rather than give up there, wake it
+            // again over Bluetooth after the second miss — one wake pulse,
+            // not one per cycle — and carry on.
+            if keepAwakeFailures == 2, !settings.bleDeviceName.isEmpty {
+                if (try? await withWakeRetry { try await client.whistle(ip: settings.deviceIP) }) != nil {
+                    keepAwakeFailures = 0
+                    logActivity("Keep Awake: the frame went to sleep (its scheduled refresh) — woke it again.", success: true)
+                    guard generation == keepAwakeGeneration else { return }
+                    scheduleNextWhistle(generation: generation)
+                    return
+                }
+            }
+            if keepAwakeFailures >= 4 {
                 statusText = "Stopped keeping the frame awake: it stopped responding."
                 logActivity("Keep Awake: stopped — the frame stopped responding.", success: false)
                 keepAwake = false
@@ -897,7 +912,22 @@ public final class PhotoController: ObservableObject {
     /// What the frame's task processor says it's doing, e.g. "Ready".
     public func fetchTaskStatus() async -> String? {
         guard !settings.deviceIP.isEmpty, let state = try? await client.fetchState(ip: settings.deviceIP) else { return nil }
-        return state.msg
+        return Self.englishTaskStatus(msg: state.msg, code: state.status)
+    }
+
+    /// The frame sends its status in Chinese ("就绪") though its docs show
+    /// "Ready". Known words are translated; anything else is shown as sent,
+    /// with the numeric code, so a new message is at least recognisable.
+    static func englishTaskStatus(msg: String?, code: Int?) -> String? {
+        let known = ["就绪": "Ready", "忙碌": "Busy", "绘制中": "Drawing", "正在绘制": "Drawing"]
+        let trimmed = msg?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if let english = known[trimmed] { return english }
+        switch (trimmed.isEmpty, code) {
+        case (true, nil): return nil
+        case (true, let code?): return "Status \(code)"
+        case (false, nil): return trimmed
+        case (false, let code?): return "\(trimmed) (code \(code))"
+        }
     }
 
     public func fetchLogConfig() async -> BloominClient.LogConfig? {
@@ -1329,11 +1359,14 @@ public final class PhotoController: ObservableObject {
     /// `@MainActor`-isolated the way an ordinary instance method would be by
     /// default.
     nonisolated func renderForFrame(cgImage: CGImage, width: Int, height: Int, cropLandscapePhotos: Bool) -> NSImage? {
-        let isLandscape = cgImage.width > cgImage.height
+        // Tuned before framing, so the black letterbox bars aren't pushed
+        // around by the contrast/brightness adjustments. A no-op by default.
+        let source = EInkTuner.apply(EInkTuning.stored(), to: cgImage)
+        let isLandscape = source.width > source.height
         if cropLandscapePhotos, isLandscape {
-            return renderFilled(cgImage: cgImage, width: width, height: height)
+            return renderFilled(cgImage: source, width: width, height: height)
         }
-        return renderLetterboxed(cgImage: cgImage, width: width, height: height, background: .black)
+        return renderLetterboxed(cgImage: source, width: width, height: height, background: .black)
     }
 
 
@@ -1379,7 +1412,7 @@ public final class PhotoController: ObservableObject {
         guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path) else { return nil }
         let modified = (attrs[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
         let size = (attrs[.size] as? NSNumber)?.int64Value ?? 0
-        var text = "\(url.path)|\(modified)|\(size)|\(cropLandscapePhotos)|\(width)x\(height)"
+        var text = "\(url.path)|\(modified)|\(size)|\(cropLandscapePhotos)|\(width)x\(height)" + EInkTuning.stored().fingerprint
         // Appended only for an explicit crop, so photos sent without one keep
         // exactly the key (and so the on-frame filename) they always had.
         if let crop { text += "|crop:\(crop.keyDescription)" }
@@ -1387,7 +1420,7 @@ public final class PhotoController: ObservableObject {
     }
 
     nonisolated static func sourceKey(forPhotosAsset id: String, cropLandscapePhotos: Bool, width: Int, height: Int) -> String {
-        shortHash("photos|\(id)|\(cropLandscapePhotos)|\(width)x\(height)")
+        shortHash("photos|\(id)|\(cropLandscapePhotos)|\(width)x\(height)" + EInkTuning.stored().fingerprint)
     }
 
     nonisolated private static func shortHash(_ text: String) -> String {
@@ -1757,7 +1790,7 @@ public final class PhotoController: ObservableObject {
     public func cropped(_ candidate: LocalFolderCandidate, crop: CropRegion) -> LocalFolderCandidate? {
         guard canCrop(candidate),
               let cgImage = loadUprightCGImage(at: candidate.fileURL),
-              let image = renderCropped(cgImage: cgImage, crop: crop, width: settings.renderWidth, height: settings.renderHeight),
+              let image = renderCropped(cgImage: EInkTuner.apply(EInkTuning.stored(), to: cgImage), crop: crop, width: settings.renderWidth, height: settings.renderHeight),
               let jpeg = ImageCanvas.jpegData(image)
         else {
             statusText = "Couldn't crop '\(candidate.fileURL.lastPathComponent)'."

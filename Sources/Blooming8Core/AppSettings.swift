@@ -383,6 +383,12 @@ public final class AppSettings: ObservableObject {
         didSet { defaults.set(cardServerEnabled, forKey: "cardServerEnabled") }
     }
 
+    /// How photos are adjusted for the e-ink panel before sending. Stored as
+    /// one value shared by both products; neutral (no change) by default.
+    @Published public var einkTuning: EInkTuning {
+        didSet { EInkTuning.store(einkTuning, in: defaults) }
+    }
+
     public convenience init() {
         self.init(defaults: UserDefaults(suiteName: AppSettings.suiteName) ?? .standard)
     }
@@ -476,6 +482,7 @@ public final class AppSettings: ObservableObject {
         }
         useTouchIDForLocks = defaults.bool(forKey: "useTouchIDForLocks")
         cardServerEnabled = defaults.object(forKey: "cardServerEnabled") as? Bool ?? true
+        einkTuning = defaults.data(forKey: "einkTuning").flatMap { try? JSONDecoder().decode(EInkTuning.self, from: $0) } ?? EInkTuning()
 
         // `frameProfiles`'s own didSet does NOT fire for the assignment
         // above: Swift skips property observers when a property is set

@@ -152,6 +152,15 @@ struct SettingsSheet: View {
                             .font(.caption)
                     }
                 }
+                Section("Tune for e-ink") {
+                    EInkTuningView(settings: settings, controller: controller)
+                }
+                Section("Museum card display") {
+                    HStack {
+                        Toggle("Serve museum cards to a CrowPanel display", isOn: $settings.cardServerEnabled)
+                        InfoButton("Shares the photo labels on your local network (port 8738) for the CrowPanel e-paper display. Turn this off if you don't have one — cards are still kept, nothing else is affected.")
+                    }
+                }
                     case .automation:
                 Section("Automatic Random Photo · \(activeProfileName)") {
                     autoRandomSection
@@ -185,12 +194,6 @@ struct SettingsSheet: View {
                     Text("For Send Remotely. Get a token in the Bloomin8 phone app: Devices → device card → ⋮ → API Token.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                }
-                Section("Museum card display") {
-                    HStack {
-                        Toggle("Serve museum cards to a CrowPanel display", isOn: $settings.cardServerEnabled)
-                        InfoButton("Shares the photo labels on your local network (port 8738) for the CrowPanel e-paper display. Turn this off if you don't have one — cards are still kept, nothing else is affected.")
-                    }
                 }
                     case .content:
                 Section("Photo of the Day") {
