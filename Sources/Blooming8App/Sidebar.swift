@@ -45,6 +45,7 @@ struct Sidebar: View {
                     }
                     row(.applePhotos)
                     row(.generated)
+                    row(.playlists)
 
                     galleriesHeader
                     ForEach(visibleGalleries, id: \.self) { name in

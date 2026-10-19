@@ -103,6 +103,9 @@ struct SettingsSheet: View {
                 Section("Device · \(activeProfileName)") {
                     deviceSettingsSection
                 }
+                Section("Status and controls · \(activeProfileName)") {
+                    FrameControlsView(controller: controller)
+                }
                     case .photos:
                 Section("Photos") {
                     HStack {

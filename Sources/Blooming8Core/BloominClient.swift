@@ -13,9 +13,40 @@ public struct DeviceInfo: Decodable {
     /// connected instead of assuming portrait 1200x1600 everywhere.
     public let width: Int?
     public let height: Int?
+    // Read-only status the frame reports (see the API docs' GET /deviceInfo).
+    public let version: String?
+    public let sn: String?
+    public let screenModel: String?
+    public let totalSize: Int?
+    public let freeSize: Int?
+    /// 0 = not connected, 2 = Wi-Fi.
+    public let networkType: Int?
+    public let staRSSI: Int?
+    public let staSSID: String?
+    public let staIP: String?
+    /// Unix time of the frame's next scheduled wake-up.
+    public let nextTime: Int?
+    public let playlist: String?
+    /// 0 = single image, 1 = gallery slideshow, 2 = playlist.
+    public let playType: Int?
+    public let playDuration: Int?
+    public let beepOn: Bool?
+    public let silenceOn: Bool?
 
     public enum CodingKeys: String, CodingKey {
-        case name, image, gallery, battery, width, height
+        case name, image, gallery, battery, width, height, version, sn, playlist
+        case screenModel = "screen_model"
+        case totalSize = "total_size"
+        case freeSize = "free_size"
+        case networkType = "network_type"
+        case staRSSI = "sta_rssi"
+        case staSSID = "sta_ssid"
+        case staIP = "sta_ip"
+        case nextTime = "next_time"
+        case playType = "play_type"
+        case playDuration = "play_duration"
+        case beepOn = "beep_on"
+        case silenceOn = "silence_on"
         case sleepDuration = "sleep_duration"
         case maxIdle = "max_idle"
         case idxWakeSens = "idx_wake_sens"
@@ -428,6 +459,169 @@ public final class BloominClient {
             throw BloominError.badResponse("log file wasn't valid text")
         }
         return text
+    }
+
+    // MARK: - System controls
+
+    private func post(ip: String, path: String) async throws {
+        let url = try URL(string: baseURL(ip: ip) + path)!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        let (_, response) = try await session.data(for: request)
+        try checkStatus(response)
+    }
+
+    /// Puts the frame to sleep now (`POST /sleep`).
+    public func sleepNow(ip: String) async throws { try await post(ip: ip, path: "/sleep") }
+
+    /// Restarts the frame (`POST /reboot`).
+    public func reboot(ip: String) async throws { try await post(ip: ip, path: "/reboot") }
+
+    /// Clears the screen to solid white (`POST /clearScreen`) — screen
+    /// maintenance for e-ink ghosting.
+    public func clearScreen(ip: String) async throws { try await post(ip: ip, path: "/clearScreen") }
+
+    public struct TaskState: Decodable {
+        public let status: Int?
+        public let msg: String?
+    }
+
+    /// What the frame's task processor is doing (`GET /state`), e.g. "Ready".
+    public func fetchState(ip: String) async throws -> TaskState {
+        let url = try URL(string: baseURL(ip: ip) + "/state")!
+        let (data, response) = try await session.data(from: url)
+        try checkStatus(response)
+        return try JSONDecoder().decode(TaskState.self, from: data)
+    }
+
+    // MARK: - Frame logging
+
+    public struct LogConfig: Decodable, Equatable {
+        public let logOn: Bool
+        public let logKeepDays: Int
+        enum CodingKeys: String, CodingKey {
+            case logOn = "log_on"
+            case logKeepDays = "log_keep_days"
+        }
+    }
+
+    public func fetchLogConfig(ip: String) async throws -> LogConfig {
+        let url = try URL(string: baseURL(ip: ip) + "/log/config")!
+        let (data, response) = try await session.data(from: url)
+        try checkStatus(response)
+        return try JSONDecoder().decode(LogConfig.self, from: data)
+    }
+
+    /// `keepDays` 0 keeps logs indefinitely.
+    public func updateLogConfig(ip: String, logOn: Bool, keepDays: Int) async throws {
+        let url = try URL(string: baseURL(ip: ip) + "/log/config")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["log_on": logOn, "log_keep_days": keepDays])
+        let (_, response) = try await session.data(for: request)
+        try checkStatus(response)
+    }
+
+    /// Deletes every log file on the frame (`DELETE /log`).
+    public func deleteAllLogs(ip: String) async throws {
+        let url = try URL(string: baseURL(ip: ip) + "/log")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        let (_, response) = try await session.data(for: request)
+        try checkStatus(response)
+    }
+
+    // MARK: - Playlists
+
+    public struct PlaylistSummary: Decodable, Identifiable, Hashable {
+        public let name: String
+        public let time: Int?
+        public var id: String { name }
+        public init(name: String, time: Int?) {
+            self.name = name
+            self.time = time
+        }
+    }
+
+    public struct PlaylistItem: Hashable {
+        public var path: String
+        public var durationSeconds: Int
+        public init(path: String, durationSeconds: Int) {
+            self.path = path
+            self.durationSeconds = durationSeconds
+        }
+    }
+
+    public struct Playlist: Hashable {
+        public var name: String
+        public var type: String
+        public var items: [PlaylistItem]
+    }
+
+    private struct PlaylistWire: Decodable {
+        let name: String
+        let type: String?
+        let list: [Item]?
+        struct Item: Decodable {
+            let name: String
+            let duration: Int?
+        }
+    }
+
+    public func fetchPlaylists(ip: String) async throws -> [PlaylistSummary] {
+        let url = try URL(string: baseURL(ip: ip) + "/playlist/list")!
+        let (data, response) = try await session.data(from: url)
+        try checkStatus(response)
+        return try JSONDecoder().decode([PlaylistSummary].self, from: data)
+    }
+
+    public func fetchPlaylist(ip: String, name: String) async throws -> Playlist {
+        var components = URLComponents(string: try baseURL(ip: ip) + "/playlist")!
+        components.queryItems = [URLQueryItem(name: "name", value: name)]
+        let (data, response) = try await readSession.data(from: components.url!)
+        try checkStatus(response)
+        let wire = try JSONDecoder().decode(PlaylistWire.self, from: data)
+        return Playlist(
+            name: wire.name,
+            type: wire.type ?? "duration",
+            items: (wire.list ?? []).map { PlaylistItem(path: $0.name, durationSeconds: $0.duration ?? 0) }
+        )
+    }
+
+    /// Creates or overwrites a "duration" playlist: each image shows for its
+    /// own number of seconds, in order (`PUT /playlist`). The "time" type
+    /// is left out — the docs don't say what its `time` strings look like.
+    public func savePlaylist(ip: String, name: String, items: [PlaylistItem]) async throws {
+        let url = try URL(string: baseURL(ip: ip) + "/playlist")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let list: [[String: Any]] = items.map { ["name": $0.path, "duration": $0.durationSeconds] }
+        let body: [String: Any] = ["name": name, "type": "duration", "list": list]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (_, response) = try await batchUploadSession.data(for: request)
+        try checkStatus(response)
+    }
+
+    public func deletePlaylist(ip: String, name: String) async throws {
+        var components = URLComponents(string: try baseURL(ip: ip) + "/playlist")!
+        components.queryItems = [URLQueryItem(name: "name", value: name)]
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = "DELETE"
+        let (_, response) = try await session.data(for: request)
+        try checkStatus(response)
+    }
+
+    /// Starts playing a playlist on the frame (`POST /show`, play_type 2).
+    public func playPlaylist(ip: String, name: String) async throws {
+        let url = try URL(string: baseURL(ip: ip) + "/show")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["play_type": 2, "playlist": name])
+        let (_, response) = try await session.data(for: request)
+        try checkStatus(response)
     }
 
     private func checkStatus(_ response: URLResponse) throws {

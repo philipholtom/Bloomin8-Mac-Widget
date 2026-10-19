@@ -22,6 +22,8 @@ public final class PhotoController: ObservableObject {
     /// Favorites works everywhere else in the app (real local files only).
     @Published public var currentLocalSourceURL: URL?
     @Published public var deviceName: String?
+    /// The whole of the frame's last `/deviceInfo` answer, for the status panel.
+    @Published public private(set) var deviceInfo: DeviceInfo?
     @Published public var batteryPercent: Int?
     @Published public var currentGalleryOnDevice: String?
     @Published public var galleries: [String] = []
@@ -654,6 +656,7 @@ public final class PhotoController: ObservableObject {
     }
 
     private func applyDeviceInfo(_ info: DeviceInfo) {
+        deviceInfo = info
         deviceName = info.name
         // The gallery of the photo actually on screen, read from its path —
         // NOT the frame's own `gallery` field, which is the gallery it last
@@ -856,6 +859,92 @@ public final class PhotoController: ObservableObject {
             statusText = "Couldn't update device settings: \(error.localizedDescription)"
             logActivity("Couldn't update device settings: \(error.localizedDescription)", success: false)
         }
+    }
+
+    // MARK: - Frame controls, logging and playlists
+
+    /// Runs a frame command with wake-retry, reporting the outcome in the
+    /// status line and the Activity log.
+    private func frameCommand(_ done: String, failed: String, _ operation: @escaping () async throws -> Void) async -> Bool {
+        isBusy = true
+        defer { isBusy = false }
+        do {
+            try await withWakeRetry(operation)
+            statusText = done
+            logActivity(done, success: true)
+            return true
+        } catch {
+            statusText = "\(failed): \(error.localizedDescription)"
+            logActivity("\(failed): \(error.localizedDescription)", success: false)
+            return false
+        }
+    }
+
+    public func sleepFrameNow() async {
+        if await frameCommand("Frame put to sleep.", failed: "Couldn't put the frame to sleep", { [self] in try await client.sleepNow(ip: settings.deviceIP) }) {
+            isDeviceAwake = false
+        }
+    }
+
+    public func clearFrameScreen() async {
+        _ = await frameCommand("Screen cleared to white.", failed: "Couldn't clear the screen", { [self] in try await client.clearScreen(ip: settings.deviceIP) })
+    }
+
+    public func rebootFrame() async {
+        _ = await frameCommand("Frame is restarting.", failed: "Couldn't restart the frame", { [self] in try await client.reboot(ip: settings.deviceIP) })
+    }
+
+    /// What the frame's task processor says it's doing, e.g. "Ready".
+    public func fetchTaskStatus() async -> String? {
+        guard !settings.deviceIP.isEmpty, let state = try? await client.fetchState(ip: settings.deviceIP) else { return nil }
+        return state.msg
+    }
+
+    public func fetchLogConfig() async -> BloominClient.LogConfig? {
+        guard !settings.deviceIP.isEmpty else { return nil }
+        return try? await client.fetchLogConfig(ip: settings.deviceIP)
+    }
+
+    public func updateLogConfig(logOn: Bool, keepDays: Int) async -> Bool {
+        await frameCommand("Frame logging updated.", failed: "Couldn't update frame logging", { [self] in
+            try await client.updateLogConfig(ip: settings.deviceIP, logOn: logOn, keepDays: keepDays)
+        })
+    }
+
+    public func deleteAllFrameLogs() async -> Bool {
+        await frameCommand("Frame logs deleted.", failed: "Couldn't delete the frame's logs", { [self] in try await client.deleteAllLogs(ip: settings.deviceIP) })
+    }
+
+    /// Every photo in `gallery` as a full device path, e.g. `/gallerys/Family/x_P.jpg`.
+    public func galleryImagePaths(_ gallery: String) async throws -> [String] {
+        let names = try await withWakeRetry { try await client.fetchAllImages(ip: settings.deviceIP, gallery: gallery) }
+        return names.map { "/gallerys/\(gallery)/\($0)" }
+    }
+
+    public func loadPlaylists() async throws -> [BloominClient.PlaylistSummary] {
+        try await withWakeRetry { try await client.fetchPlaylists(ip: settings.deviceIP) }
+    }
+
+    public func loadPlaylist(_ name: String) async throws -> BloominClient.Playlist {
+        try await withWakeRetry { try await client.fetchPlaylist(ip: settings.deviceIP, name: name) }
+    }
+
+    public func savePlaylist(name: String, items: [BloominClient.PlaylistItem]) async -> Bool {
+        await frameCommand("Saved playlist '\(name)'.", failed: "Couldn't save playlist '\(name)'", { [self] in
+            try await client.savePlaylist(ip: settings.deviceIP, name: name, items: items)
+        })
+    }
+
+    public func deletePlaylist(_ name: String) async -> Bool {
+        await frameCommand("Deleted playlist '\(name)'.", failed: "Couldn't delete playlist '\(name)'", { [self] in
+            try await client.deletePlaylist(ip: settings.deviceIP, name: name)
+        })
+    }
+
+    public func playPlaylist(_ name: String) async {
+        _ = await frameCommand("Playing playlist '\(name)'.", failed: "Couldn't play playlist '\(name)'", { [self] in
+            try await client.playPlaylist(ip: settings.deviceIP, name: name)
+        })
     }
 
     public func refreshCurrentPhoto() async {

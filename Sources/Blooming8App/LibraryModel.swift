@@ -14,6 +14,7 @@ enum LibrarySource: Hashable {
     case favorites
     case applePhotos
     case generated
+    case playlists
     case gallery(String)
 
     var title: String {
@@ -25,6 +26,7 @@ enum LibrarySource: Hashable {
         case .favorites: return "Favorites"
         case .applePhotos: return "Apple Photos"
         case .generated: return "Generated"
+        case .playlists: return "Playlists"
         case .gallery(let name): return name
         }
     }
@@ -38,6 +40,7 @@ enum LibrarySource: Hashable {
         case .favorites: return "star"
         case .applePhotos: return "photo.on.rectangle"
         case .generated: return "sparkles"
+        case .playlists: return "list.bullet.rectangle"
         case .gallery: return "rectangle.stack"
         }
     }
@@ -180,7 +183,7 @@ final class LibraryModel: ObservableObject {
         isLoadingMore = false
 
         switch source {
-        case .currentPhoto, .generated, .browseFiles, .museumCards:
+        case .currentPhoto, .generated, .browseFiles, .museumCards, .playlists:
             // .browseFiles has its own view (FileBrowserView) with its own
             // folder-navigation state — it never routes through this grid.
             items = []

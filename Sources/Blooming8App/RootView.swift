@@ -162,6 +162,8 @@ struct RootView: View {
             FileBrowserView(settings: settings, controller: controller)
         case .museumCards:
             MuseumCardsView(settings: settings, controller: controller)
+        case .playlists:
+            PlaylistsView(settings: settings, controller: controller)
         default:
             HSplitView {
                 LibraryGrid(
@@ -358,7 +360,7 @@ struct RootView: View {
 
     private var isGridSource: Bool {
         switch activeSource {
-        case .currentPhoto, .generated, .museumCards: return false
+        case .currentPhoto, .generated, .museumCards, .playlists: return false
         default: return true
         }
     }

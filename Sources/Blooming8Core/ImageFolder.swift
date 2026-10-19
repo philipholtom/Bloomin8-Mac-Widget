@@ -158,6 +158,25 @@ public actor DeviceThumbnailStore {
         return image
     }
 
+    /// A thumbnail already on this Mac — in memory or on disk, at any of
+    /// `sizes` — without asking the frame. The caches are keyed by size, so a
+    /// screen that wants "any copy will do" (a small preview that can reuse
+    /// what the gallery grid or the museum cards already fetched) tries each
+    /// size in turn. Works while the frame is asleep.
+    public func cachedThumbnail(ip: String, path: String, sizes: [Int]) -> NSImage? {
+        for size in sizes {
+            let key = "\(ip)#\(path)#\(size)"
+            if let cached = cache.object(forKey: key as NSString) { return cached }
+            if let diskData = try? Data(contentsOf: Self.diskCacheURL(for: key)),
+               let cgImage = loadUprightCGImage(data: diskData, maxPixelSize: size) {
+                let image = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+                cache.setObject(image, forKey: key as NSString)
+                return image
+            }
+        }
+        return nil
+    }
+
     public func clear() {
         cache.removeAllObjects()
         if let files = try? FileManager.default.contentsOfDirectory(at: Self.diskCacheDirectory, includingPropertiesForKeys: nil) {
