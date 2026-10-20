@@ -57,7 +57,7 @@ No Xcode project is needed; this is a plain Swift Package Manager workspace.
 
 ## Installing a release
 
-Download `Bloomin8-<version>.dmg` from the [Releases](https://github.com/philipholtom/Blooming8-Mac-Widget/releases) page, open it, and drag both apps onto Applications. The apps aren't notarized by Apple, so macOS blocks the first launch. Run this once in Terminal (works on every macOS version):
+Download `Bloomin8-<version>.dmg` from the [Releases](https://github.com/philipholtom/Bloomin8-Mac-Widget/releases) page, open it, and drag both apps onto Applications. The apps aren't notarized by Apple, so macOS blocks the first launch. Run this once in Terminal (works on every macOS version):
 
 ```bash
 xattr -dr com.apple.quarantine "/Applications/Bloomin8 Mac.app" "/Applications/Bloomin8 Widget.app"
@@ -70,8 +70,8 @@ Maintainers: `./build_app.sh all && ./package_release.sh` produces the disk imag
 ## Building & running
 
 ```sh
-git clone https://github.com/philipholtom/Blooming8-Mac-Widget.git
-cd Blooming8-Mac-Widget
+git clone https://github.com/philipholtom/Bloomin8-Mac-Widget.git
+cd Bloomin8-Mac-Widget
 ./build_app.sh
 ```
 

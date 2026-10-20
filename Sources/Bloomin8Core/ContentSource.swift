@@ -63,7 +63,7 @@ public enum ContentSourceError: LocalizedError {
 /// Wikimedia's API etiquette requires a descriptive User-Agent — the
 /// original Python scripts embedded a personal name/email, which doesn't
 /// belong in a public repo, so this identifies the app instead.
-public let contentSourceUserAgent = "Bloomin8Widget/1.0 (+https://github.com/philipholtom/Blooming8-Mac-Widget)"
+public let contentSourceUserAgent = "Bloomin8Widget/1.0 (+https://github.com/philipholtom/Bloomin8-Mac-Widget)"
 
 public enum ContentSources {
     public static let all: [ContentSource] = [
