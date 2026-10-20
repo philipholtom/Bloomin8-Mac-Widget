@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDisplayName</key>
-	<string>Blooming8</string>
+	<string>Bloomin8 Mac</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -20,19 +20,19 @@
 		</dict>
 	</array>
 	<key>CFBundleExecutable</key>
-	<string>Blooming8App</string>
+	<string>Bloomin8App</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.pholtom.blooming8app</string>
 	<key>CFBundleName</key>
-	<string>Blooming8</string>
+	<string>Bloomin8 Mac</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.50</string>
+	<string>1.54</string>
 	<key>CFBundleVersion</key>
-	<string>51</string>
+	<string>55</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
 	<key>NSAppTransportSecurity</key>
@@ -41,7 +41,7 @@
 		<true/>
 	</dict>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Blooming8 uses Bluetooth to send a wake pulse to your photo frame when it's asleep, so it can reconnect over Wi-Fi.</string>
+	<string>Bloomin8 Mac uses Bluetooth to send a wake pulse to your photo frame when it's asleep, so it can reconnect over Wi-Fi.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_b8cards._tcp</string>
@@ -49,9 +49,9 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Blooming8 connects to your photo frame over your local Wi-Fi network to show the current photo and display new ones.</string>
+	<string>Bloomin8 Mac connects to your photo frame over your local Wi-Fi network to show the current photo and display new ones.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Blooming8 reads your Photos library so you can browse and send photos to your frame.</string>
+	<string>Bloomin8 Mac reads your Photos library so you can browse and send photos to your frame.</string>
 	<key>NSServices</key>
 	<array>
 		<dict>
@@ -63,7 +63,7 @@
 			<key>NSMessage</key>
 			<string>sendToFrame</string>
 			<key>NSPortName</key>
-			<string>Blooming8</string>
+			<string>Bloomin8 Mac</string>
 			<key>NSSendFileTypes</key>
 			<array>
 				<string>public.image</string>

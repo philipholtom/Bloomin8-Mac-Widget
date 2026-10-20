@@ -3,21 +3,21 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDisplayName</key>
-	<string>Blooming8 Widget</string>
+	<string>Bloomin8 Widget</string>
 	<key>CFBundleExecutable</key>
-	<string>Blooming8Widget</string>
+	<string>Bloomin8Widget</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.pholtom.blooming8widget</string>
 	<key>CFBundleName</key>
-	<string>Blooming8Widget</string>
+	<string>Bloomin8Widget</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.31</string>
+	<string>1.34</string>
 	<key>CFBundleVersion</key>
-	<string>32</string>
+	<string>35</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
 	<key>LSUIElement</key>
@@ -28,12 +28,12 @@
 		<true/>
 	</dict>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Blooming8 Widget uses Bluetooth to send a wake pulse to your photo frame when it's asleep, so it can reconnect over Wi-Fi.</string>
+	<string>Bloomin8 Widget uses Bluetooth to send a wake pulse to your photo frame when it's asleep, so it can reconnect over Wi-Fi.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_b8cards._tcp</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Blooming8 Widget connects to your Blooming8 photo frame over your local Wi-Fi network to show the current photo and display new ones.</string>
+	<string>Bloomin8 Widget connects to your Bloomin8 photo frame over your local Wi-Fi network to show the current photo and display new ones.</string>
 </dict>
 </plist>

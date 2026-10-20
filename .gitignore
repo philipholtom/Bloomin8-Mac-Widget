@@ -1,7 +1,9 @@
 .build/
 .swiftpm/
-Blooming8Widget.app/
+Bloomin8Widget.app/
 Blooming8.app/
+Bloomin8 Mac.app/
+Bloomin8 Widget.app/
 .DS_Store
 .claude/
 dist/

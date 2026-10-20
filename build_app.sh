@@ -1,8 +1,8 @@
 #!/bin/bash
-# Builds and installs the two Blooming8 products:
-#   Blooming8Widget.app  menu bar widget (LSUIElement, popover)
-#   Blooming8.app        full window app (sidebar + gallery grid)
-# Both link the shared Blooming8Core library.
+# Builds and installs the two Bloomin8 products:
+#   Bloomin8 Widget.app  menu bar widget (LSUIElement, popover)
+#   Bloomin8 Mac.app     full window app (sidebar + gallery grid)
+# Both link the shared Bloomin8Core library.
 #
 # Usage: ./build_app.sh [widget|app|all]   (default: all)
 set -euo pipefail
@@ -51,24 +51,30 @@ build_product() {
     cp -R "$bundle" "$installed"
     echo "Installed $installed"
 
+    # The apps were called Blooming8 / Blooming8Widget before the rename;
+    # remove the old copies (and stop them) so two of each don't linger.
+    pkill -x "Blooming8App" 2>/dev/null || true
+    pkill -x "Blooming8Widget" 2>/dev/null || true
+    rm -rf "/Applications/Blooming8.app" "/Applications/Blooming8Widget.app" "Blooming8.app" "Blooming8Widget.app"
+
     # Let Finder pick up the app's "Send to Frame" service and image file
     # types without waiting for a log out / log in.
-    if [ "$bundle" = "Blooming8.app" ]; then
+    if [ "$bundle" = "Bloomin8 Mac.app" ]; then
         /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$installed" >/dev/null 2>&1 || true
         /System/Library/CoreServices/pbs -update >/dev/null 2>&1 || true
     fi
 }
 
 if [ "$TARGET" = "widget" ] || [ "$TARGET" = "all" ]; then
-    build_product "Blooming8Widget" "Blooming8Widget.app" "Info.plist" "com.pholtom.blooming8widget"
+    build_product "Bloomin8Widget" "Bloomin8 Widget.app" "Info.plist" "com.pholtom.blooming8widget"
 fi
 
 if [ "$TARGET" = "app" ] || [ "$TARGET" = "all" ]; then
-    build_product "Blooming8App" "Blooming8.app" "Info-App.plist" "com.pholtom.blooming8app"
+    build_product "Bloomin8App" "Bloomin8 Mac.app" "Info-App.plist" "com.pholtom.blooming8app"
 fi
 
 case "$TARGET" in
-    widget) open "/Applications/Blooming8Widget.app" ;;
-    app)    open "/Applications/Blooming8.app" ;;
-    all)    open "/Applications/Blooming8Widget.app"; open "/Applications/Blooming8.app" ;;
+    widget) open "/Applications/Bloomin8 Widget.app" ;;
+    app)    open "/Applications/Bloomin8 Mac.app" ;;
+    all)    open "/Applications/Bloomin8 Widget.app"; open "/Applications/Bloomin8 Mac.app" ;;
 esac

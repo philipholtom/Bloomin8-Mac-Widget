@@ -2,11 +2,11 @@
 import PackageDescription
 
 let package = Package(
-    name: "Blooming8",
+    name: "Bloomin8",
     platforms: [.macOS(.v13)],
     products: [
-        .executable(name: "Blooming8Widget", targets: ["Blooming8Widget"]),
-        .executable(name: "Blooming8App", targets: ["Blooming8App"])
+        .executable(name: "Bloomin8Widget", targets: ["Bloomin8Widget"]),
+        .executable(name: "Bloomin8App", targets: ["Bloomin8App"])
     ],
     targets: [
         // Everything that isn't tied to a particular presentation: the device
@@ -14,20 +14,20 @@ let package = Package(
         // generated content sources. Shared verbatim by the menu bar widget
         // and the windowed app so fixes land once.
         .target(
-            name: "Blooming8Core",
-            path: "Sources/Blooming8Core"
+            name: "Bloomin8Core",
+            path: "Sources/Bloomin8Core"
         ),
         // The menu bar widget: status item + transient popover.
         .executableTarget(
-            name: "Blooming8Widget",
-            dependencies: ["Blooming8Core"],
-            path: "Sources/Blooming8Widget"
+            name: "Bloomin8Widget",
+            dependencies: ["Bloomin8Core"],
+            path: "Sources/Bloomin8Widget"
         ),
         // The full window app: sidebar + gallery grid.
         .executableTarget(
-            name: "Blooming8App",
-            dependencies: ["Blooming8Core"],
-            path: "Sources/Blooming8App"
+            name: "Bloomin8App",
+            dependencies: ["Bloomin8Core"],
+            path: "Sources/Bloomin8App"
         )
     ]
 )

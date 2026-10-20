@@ -1,9 +1,9 @@
-# Blooming8
+# Bloomin8 Mac
 
 Two macOS apps for the [BLOOMIN8](https://bloomin8.com/) e-ink photo frame, sharing one underlying engine:
 
-- **Blooming8Widget** — a menu bar app for quick actions: see what's on your frame, push a random photo, wake it up, all from a popover without a Dock icon.
-- **Blooming8** — a full windowed app with a sidebar and a real image grid, for actually browsing — a folder of thousands of local photos, a device gallery, or pulling a screenshot from a local video.
+- **Bloomin8 Widget** — a menu bar app for quick actions: see what's on your frame, push a random photo, wake it up, all from a popover without a Dock icon.
+- **Bloomin8 Mac** — a full windowed app with a sidebar and a real image grid, for actually browsing — a folder of thousands of local photos, a device gallery, or pulling a screenshot from a local video.
 
 Use the widget for quick, everyday actions; use the windowed app when you want to properly look through a folder or gallery.
 
@@ -57,10 +57,10 @@ No Xcode project is needed; this is a plain Swift Package Manager workspace.
 
 ## Installing a release
 
-Download `Blooming8-<version>.dmg` from the [Releases](https://github.com/philipholtom/Blooming8-Mac-Widget/releases) page, open it, and drag both apps onto Applications. The apps aren't notarized by Apple, so macOS blocks the first launch. Run this once in Terminal (works on every macOS version):
+Download `Bloomin8-<version>.dmg` from the [Releases](https://github.com/philipholtom/Blooming8-Mac-Widget/releases) page, open it, and drag both apps onto Applications. The apps aren't notarized by Apple, so macOS blocks the first launch. Run this once in Terminal (works on every macOS version):
 
 ```bash
-xattr -dr com.apple.quarantine /Applications/Blooming8.app /Applications/Blooming8Widget.app
+xattr -dr com.apple.quarantine "/Applications/Bloomin8 Mac.app" "/Applications/Bloomin8 Widget.app"
 ```
 
 Or try to open each app, then go to System Settings → Privacy & Security and click **Open Anyway**. (On macOS 14 and earlier, right-click → Open also works.) Requires macOS 13 or later, Apple Silicon or Intel.
@@ -78,8 +78,8 @@ cd Blooming8-Mac-Widget
 `build_app.sh` builds both apps, packages, codesigns, installs them to `/Applications` (replacing any previous copies), and launches them. Pass `widget` or `app` to build just one:
 
 ```sh
-./build_app.sh widget   # just Blooming8Widget.app
-./build_app.sh app      # just Blooming8.app
+./build_app.sh widget   # just Bloomin8 Widget.app
+./build_app.sh app      # just Bloomin8 Mac.app
 ./build_app.sh          # both (same as "all")
 ```
 
@@ -92,7 +92,7 @@ On first launch of either app, open Settings (gear icon) to enter:
 
 Settings are shared between both apps (one `UserDefaults` suite) — configure either one and the other picks it up.
 
-To launch the widget automatically at login, add `/Applications/Blooming8Widget.app` in System Settings → General → Login Items.
+To launch the widget automatically at login, add `/Applications/Bloomin8 Widget.app` in System Settings → General → Login Items.
 
 ## Museum cards and the CrowPanel display
 
@@ -120,7 +120,7 @@ The display's firmware isn't part of this repo.
 ## Project structure
 
 ```
-Sources/Blooming8Core/       shared engine — device client, controller, settings, BLE wake, content sources
+Sources/Bloomin8Core/       shared engine — device client, controller, settings, BLE wake, content sources
   BloominClient.swift          the frame's local HTTP API client
   PhotoController.swift        app state and business logic
   AppSettings.swift            persisted settings (shared UserDefaults suite)
@@ -133,12 +133,12 @@ Sources/Blooming8Core/       shared engine — device client, controller, settin
   ContentRendering.swift        image compositing (letterbox/crop-fill, generated content)
   *Source.swift                 generated content sources (weather, moon phase, fortune, ...)
 
-Sources/Blooming8Widget/     the menu bar app
+Sources/Bloomin8Widget/     the menu bar app
   main.swift, AppDelegate.swift  entry point, status item, popover
   ContentView.swift               the popover UI
 
-Sources/Blooming8App/        the windowed app
-  Blooming8AppMain.swift          entry point, window/scene setup
+Sources/Bloomin8App/        the windowed app
+  Bloomin8AppMain.swift          entry point, window/scene setup
   RootView.swift, Sidebar.swift   sidebar navigation
   LibraryModel.swift, LibraryGrid.swift, InspectorPane.swift   the image grid + detail pane
   VideoFramePickerSheet.swift     video screenshot picker

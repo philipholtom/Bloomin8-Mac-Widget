@@ -27,27 +27,40 @@ jobs:
           ls -l dl
       - name: Mount and install
         run: |
-          hdiutil attach dl/*.dmg -mountpoint /Volumes/Blooming8 -nobrowse -quiet
-          cp -R /Volumes/Blooming8/Blooming8.app /Volumes/Blooming8/Blooming8Widget.app /Applications/
-          hdiutil detach /Volumes/Blooming8 -quiet
+          hdiutil attach dl/*.dmg -mountpoint /Volumes/b8 -nobrowse -quiet
+          # Whatever .app bundles the image holds (the names changed from
+          # Blooming8* to Bloomin8* in 1.54, so don't hard-code them).
+          : > apps.txt
+          for app in /Volumes/b8/*.app; do
+            name=$(basename "$app")
+            cp -R "$app" /Applications/
+            echo "$name" >> apps.txt
+          done
+          hdiutil detach /Volumes/b8 -quiet
+          cat apps.txt
       - name: Check signature and architectures
         run: |
-          for app in Blooming8 Blooming8Widget; do
-            codesign --verify --strict /Applications/$app.app
-            lipo -archs /Applications/$app.app/Contents/MacOS/*
-            otool -L /Applications/$app.app/Contents/MacOS/* | grep -v -E '/usr/lib|/System' | tail -n +2 || true
-          done
+          while IFS= read -r name; do
+            app="/Applications/$name"
+            codesign --verify --strict "$app"
+            exe="$app/Contents/MacOS/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")"
+            echo "$name: $(lipo -archs "$exe")"
+            otool -L "$exe" | grep -v -E '/usr/lib|/System' | tail -n +2 || true
+          done < apps.txt
       - name: Launch and confirm both stay running
         run: |
           sw_vers
-          /Applications/Blooming8Widget.app/Contents/MacOS/Blooming8Widget > widget.log 2>&1 &
-          /Applications/Blooming8.app/Contents/MacOS/Blooming8App > app.log 2>&1 &
+          while IFS= read -r name; do
+            app="/Applications/$name"
+            exe=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")
+            "$app/Contents/MacOS/$exe" > "$exe.log" 2>&1 &
+          done < apps.txt
           sleep 25
           status=0
-          for p in Blooming8Widget Blooming8App; do
-            if pgrep -x $p >/dev/null; then echo "OK: $p still running"; else echo "FAIL: $p exited"; status=1; fi
-          done
-          echo "--- widget.log"; cat widget.log
-          echo "--- app.log"; cat app.log
-          ls ~/Library/Logs/DiagnosticReports 2>/dev/null | grep -i blooming || true
+          while IFS= read -r name; do
+            exe=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "/Applications/$name/Contents/Info.plist")
+            if pgrep -x "$exe" >/dev/null; then echo "OK: $exe still running"; else echo "FAIL: $exe exited"; status=1; fi
+            echo "--- $exe.log"; cat "$exe.log"
+          done < apps.txt
+          ls ~/Library/Logs/DiagnosticReports 2>/dev/null | grep -i -E "bloomin8|blooming8" || true
           exit $status
