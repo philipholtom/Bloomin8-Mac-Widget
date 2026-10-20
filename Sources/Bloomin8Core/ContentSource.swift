@@ -79,6 +79,7 @@ public enum ContentSources {
         WikipediaPOTDSource(),
         CatPhotoSource(),
         DogPhotoSource(),
-        SatelliteMapSource()
+        SatelliteMapSource(),
+        MoviePosterSource()
     ]
 }

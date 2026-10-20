@@ -389,6 +389,17 @@ public final class AppSettings: ObservableObject {
         didSet { EInkTuning.store(einkTuning, in: defaults) }
     }
 
+    /// Your free themoviedb.org key for the Movie Posters source, kept in the
+    /// private secrets file (not the shared defaults).
+    @Published public var tmdbApiKey: String {
+        didSet { SecretStore.write(tmdbApiKey, account: MoviePosterSource.keyAccount) }
+    }
+
+    /// Which films the Movie Posters source picks from.
+    @Published public var moviePosterOptions: MoviePosterOptions {
+        didSet { MoviePosterOptions.store(moviePosterOptions, in: defaults) }
+    }
+
     public convenience init() {
         self.init(defaults: UserDefaults(suiteName: AppSettings.suiteName) ?? .standard)
     }
@@ -482,6 +493,8 @@ public final class AppSettings: ObservableObject {
         }
         useTouchIDForLocks = defaults.bool(forKey: "useTouchIDForLocks")
         cardServerEnabled = defaults.object(forKey: "cardServerEnabled") as? Bool ?? true
+        tmdbApiKey = SecretStore.read(account: MoviePosterSource.keyAccount) ?? ""
+        moviePosterOptions = defaults.data(forKey: "moviePosterOptions").flatMap { try? JSONDecoder().decode(MoviePosterOptions.self, from: $0) } ?? MoviePosterOptions()
         einkTuning = defaults.data(forKey: "einkTuning").flatMap { try? JSONDecoder().decode(EInkTuning.self, from: $0) } ?? EInkTuning()
 
         // `frameProfiles`'s own didSet does NOT fire for the assignment

@@ -205,6 +205,37 @@ struct SettingsSheet: View {
                             .font(.caption)
                     }
                 }
+                Section("Movie Posters") {
+                    SecureField("TMDB API key", text: $settings.tmdbApiKey, prompt: Text("Paste your free key"))
+                        .textFieldStyle(.roundedBorder)
+                    HStack(spacing: 4) {
+                        Text("Needed for the Movie Posters source.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Link("Get a free key", destination: URL(string: "https://www.themoviedb.org/settings/api")!)
+                            .font(.caption)
+                    }
+                    Picker("Pick films from", selection: $settings.moviePosterOptions.mode) {
+                        ForEach(MoviePosterMode.allCases) { Text($0.label).tag($0) }
+                    }
+                    if settings.moviePosterOptions.mode == .popular || settings.moviePosterOptions.mode == .topRated {
+                        Picker("Decade", selection: $settings.moviePosterOptions.decadeStart) {
+                            Text("Any").tag(0)
+                            ForEach(Array(stride(from: 1920, through: 2020, by: 10)), id: \.self) { Text("\($0)s").tag($0) }
+                        }
+                        Picker("Genre", selection: $settings.moviePosterOptions.genreID) {
+                            Text("Any").tag(0)
+                            ForEach(MovieGenres.all, id: \.id) { Text($0.name).tag($0.id) }
+                        }
+                    }
+                    if settings.moviePosterOptions.mode == .search {
+                        TextField("Film title", text: $settings.moviePosterOptions.query, prompt: Text("e.g. Blade Runner"))
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    Text("This product uses the TMDB API but is not endorsed or certified by TMDB.")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
                 Section("Weather") {
 
                     Text("Weather location: type a town or city and click Look Up, or edit the coordinates.")
@@ -1190,6 +1221,9 @@ struct SettingsSheet: View {
             if let battery = controller.batteryPercent {
                 LabeledContent("Battery", value: "\(battery)%")
             }
+            Text("Movie poster data and images: This product uses the TMDB API but is not endorsed or certified by TMDB.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
