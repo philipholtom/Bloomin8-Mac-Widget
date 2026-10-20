@@ -36,6 +36,10 @@ public final class MuseumCardServer {
     private init() {}
 
     private var syncTimer: Timer?
+    /// When the port was last tried, so a port held by the other Bloomin8
+    /// product is retried once a minute rather than every few seconds.
+    private var lastListenAttempt: Date?
+    private var loggedFailure = false
     private var enabledCancellable: AnyCancellable?
 
     /// Starts watching the "card server" setting and serves while it's on.
@@ -50,15 +54,17 @@ public final class MuseumCardServer {
         }
         enabledCancellable = settings.$cardServerEnabled.sink { _ in
             // `@Published` publishes before the value lands in the defaults.
-            DispatchQueue.main.async { MuseumCardServer.shared.sync() }
+            DispatchQueue.main.async { MuseumCardServer.shared.sync(force: true) }
         }
         sync()
     }
 
-    private func sync() {
+    private func sync(force: Bool = false) {
         let defaults = UserDefaults(suiteName: AppSettings.suiteName) ?? .standard
         let enabled = defaults.object(forKey: "cardServerEnabled") as? Bool ?? true
         if enabled, listener == nil {
+            if !force, let last = lastListenAttempt, Date().timeIntervalSince(last) < 60 { return }
+            lastListenAttempt = Date()
             listen()
         } else if !enabled, let running = listener {
             running.cancel()
@@ -76,9 +82,21 @@ public final class MuseumCardServer {
                 Task { @MainActor in MuseumCardServer.shared.handle(connection) }
             }
             listener.stateUpdateHandler = { state in
-                if case .failed(let error) = state {
-                    NSLog("MuseumCardServer: listener failed (probably the other Bloomin8 product is serving): \(error)")
-                    Task { @MainActor in MuseumCardServer.shared.listener = nil }
+                switch state {
+                case .ready:
+                    Task { @MainActor in MuseumCardServer.shared.loggedFailure = false }
+                case .failed(let error):
+                    Task { @MainActor in
+                        let server = MuseumCardServer.shared
+                        // Logged once per spell of failing, not on every retry.
+                        if !server.loggedFailure {
+                            NSLog("MuseumCardServer: listener failed (probably the other Bloomin8 product is serving): \(error)")
+                            server.loggedFailure = true
+                        }
+                        server.listener = nil
+                    }
+                default:
+                    break
                 }
             }
             listener.start(queue: .main)
