@@ -1,5 +1,7 @@
 # Bloomin8 Mac
 
+![Bloomin8 Mac showing what's on the frame, what's coming up, recent activity and the battery](docs/screenshot.png)
+
 Two macOS apps for the [BLOOMIN8](https://bloomin8.com/) e-ink photo frame, sharing one underlying engine:
 
 - **Bloomin8 Widget** — a menu bar app for quick actions: see what's on your frame, push a random photo, wake it up, all from a popover without a Dock icon.
