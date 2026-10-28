@@ -378,9 +378,16 @@ private struct ToolbarLabel: View {
     /// "Keep A…" when the toolbar is tight.
     var body: some View {
         HStack(spacing: 5) {
+            // A fixed-width icon slot: a button whose icon swaps between an
+            // outline and a filled symbol (Keep Awake, Privacy) changes width
+            // when toggled, and the toolbar only re-measured it after a click —
+            // so it showed clipped until then.
             Image(systemName: systemImage)
+                .frame(width: 18)
             Text(title)
+                .lineLimit(1)
         }
-        .fixedSize()
+        .fixedSize(horizontal: true, vertical: false)
+        .layoutPriority(1)
     }
 }
