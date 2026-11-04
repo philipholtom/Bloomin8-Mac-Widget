@@ -155,6 +155,20 @@ final class LibraryModel: ObservableObject {
         self.controller = controller
     }
 
+    /// True after "Shuffle": the grid shows the photos in a random order, with
+    /// no folder headers (they'd repeat), until "Sort A–Z" or a different source.
+    @Published private(set) var isShuffled = false
+
+    func shuffleItems() {
+        items.shuffle()
+        isShuffled = true
+    }
+
+    func sortItemsByName() {
+        items.sort { ($0.url?.path ?? $0.name).localizedStandardCompare($1.url?.path ?? $1.name) == .orderedAscending }
+        isShuffled = false
+    }
+
     var filteredItems: [LibraryItem] {
         let query = searchText.trimmingCharacters(in: .whitespaces)
         guard !query.isEmpty else { return items }
@@ -176,6 +190,7 @@ final class LibraryModel: ObservableObject {
         Self.log.notice("load: \(source.title, privacy: .public)")
         loadTask?.cancel()
         currentSource = source
+        isShuffled = false
         selection = nil
         selectedIDs = []
         loadError = nil

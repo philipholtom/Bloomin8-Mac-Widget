@@ -44,7 +44,11 @@ struct LibraryGrid: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .searchable(text: $library.searchText, placement: .toolbar, prompt: "Filter by filename")
         .safeAreaInset(edge: .top, spacing: 0) {
-            if library.currentSource == .applePhotos { photosHeader }
+            if library.currentSource == .applePhotos {
+                photosHeader
+            } else if library.currentSource == .localFolder, !library.items.isEmpty {
+                localFolderHeader
+            }
         }
         .safeAreaInset(edge: .bottom) { countBar }
         .sheet(isPresented: $showPhotosPicker) {
@@ -115,7 +119,7 @@ struct LibraryGrid: View {
         // inherently flat), and it's the source people actually browse
         // recursively, which is what made "which folder am I looking at"
         // worth solving.
-        if case .localFolder = library.currentSource {
+        if case .localFolder = library.currentSource, !library.isShuffled {
             groupedGrid
         } else {
             flatGrid
@@ -389,6 +393,34 @@ struct LibraryGrid: View {
         }
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Local Folder header
+
+    /// Shuffle and Sort A–Z for the Local Folder grid. Shuffled, the photos
+    /// are mixed across every subfolder with no folder headings.
+    private var localFolderHeader: some View {
+        HStack(spacing: 10) {
+            Button {
+                library.shuffleItems()
+            } label: {
+                Label(library.isShuffled ? "Shuffle again" : "Shuffle", systemImage: "shuffle")
+            }
+            .help("Show the photos in a random order, mixed across all subfolders")
+
+            if library.isShuffled {
+                Button {
+                    library.sortItemsByName()
+                } label: {
+                    Label("Sort A–Z", systemImage: "textformat.abc")
+                }
+                .help("Back to folder order")
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(.bar)
     }
 
     // MARK: - Apple Photos header
