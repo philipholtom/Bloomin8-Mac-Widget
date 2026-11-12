@@ -60,6 +60,8 @@ public final class PhotoController: ObservableObject {
     /// The active frame's battery readings over time — see `BatteryHistory`.
     @Published public private(set) var batterySamples: [BatterySample] = []
     private var batteryProfileCancellable: AnyCancellable?
+    /// What's been on the frame, newest first — see `ShownHistory`.
+    @Published public private(set) var recentlyShown: [ShownEntry] = []
     private var frameSwitchCancellable: AnyCancellable?
     /// Each frame's galleries as last read, so switching to a frame that's
     /// asleep still shows its own list rather than the previous frame's.
@@ -167,6 +169,7 @@ public final class PhotoController: ObservableObject {
             .removeDuplicates()
             .sink { [weak self] id in
                 self?.batterySamples = BatteryHistory.load(profileID: id)
+                self?.recentlyShown = ShownHistory.load(profileID: id)
             }
 
         // Switching frames: drop everything that belonged to the old one
@@ -777,6 +780,38 @@ public final class PhotoController: ObservableObject {
             currentLocalSourceURL = nil
         }
         currentImagePath = path
+        noteShown(path)
+    }
+
+    /// Adds `path` to the recently-shown list. The file is re-read first:
+    /// the app and the widget both watch the frame and both write it.
+    private func noteShown(_ path: String) {
+        guard path.hasPrefix("/gallerys/") else { return }
+        let profileID = settings.activeFrameProfileID
+        let stored = ShownHistory.load(profileID: profileID)
+        guard let updated = ShownHistory.recording(path, at: Date(), into: stored) else {
+            if stored != recentlyShown { recentlyShown = stored }
+            return
+        }
+        recentlyShown = updated
+        ShownHistory.save(updated, profileID: profileID)
+    }
+
+    /// Re-reads the list (the widget may have added to it).
+    public func reloadRecentlyShown() {
+        recentlyShown = ShownHistory.load(profileID: settings.activeFrameProfileID)
+    }
+
+    public func removeFromRecentlyShown(_ path: String) {
+        let profileID = settings.activeFrameProfileID
+        let updated = ShownHistory.load(profileID: profileID).filter { $0.path != path }
+        ShownHistory.save(updated, profileID: profileID)
+        recentlyShown = updated
+    }
+
+    public func clearRecentlyShown() {
+        ShownHistory.save([], profileID: settings.activeFrameProfileID)
+        recentlyShown = []
     }
 
     private func isConnectivityError(_ error: Error) -> Bool {
@@ -923,6 +958,33 @@ public final class PhotoController: ObservableObject {
         } catch {
             statusText = "Couldn't update device settings: \(error.localizedDescription)"
             logActivity("Couldn't update device settings: \(error.localizedDescription)", success: false)
+        }
+    }
+
+    /// Sends a hand-made card (a message or QR code) to the "Messages"
+    /// gallery and shows it. `card` is filed as its museum card.
+    public func showCardImage(jpeg: Data, card: MuseumCard) async {
+        isBusy = true
+        defer { isBusy = false }
+        let gallery = "Messages"
+        do {
+            let info = try await withWakeRetry { try await client.fetchDeviceInfo(ip: settings.deviceIP) }
+            applyDeviceInfo(info)
+            statusText = "Sending the card..."
+            await client.ensureGallery(ip: settings.deviceIP, name: gallery)
+            let filename = orientedFilename("card_\(Int(Date().timeIntervalSince1970))")
+            let path = try await client.uploadImage(ip: settings.deviceIP, filename: filename, gallery: gallery, imageData: jpeg, showNow: true)
+            previewImage = NSImage(data: jpeg)
+            currentImageData = jpeg
+            setCurrentImagePath(path)
+            currentGalleryOnDevice = gallery
+            MuseumCardStore.shared.autoFill(card, for: path)
+            statusText = "Showed the card."
+            logActivity("Showed a message or QR card", success: true)
+            await loadGalleries()
+        } catch {
+            statusText = "Couldn't send the card: \(error.localizedDescription)"
+            logActivity("Couldn't send the card: \(error.localizedDescription)", success: false)
         }
     }
 

@@ -8,6 +8,7 @@ import os
 /// What the sidebar can select, and the detail pane can show.
 enum LibrarySource: Hashable {
     case currentPhoto
+    case recentlyShown
     case localFolder
     case browseFiles
     case museumCards
@@ -15,11 +16,13 @@ enum LibrarySource: Hashable {
     case applePhotos
     case generated
     case playlists
+    case messageCard
     case gallery(String)
 
     var title: String {
         switch self {
         case .currentPhoto: return "On the Frame"
+        case .recentlyShown: return "Recently Shown"
         case .localFolder: return "Local Folder"
         case .browseFiles: return "Browse Files"
         case .museumCards: return "Museum Cards"
@@ -27,6 +30,7 @@ enum LibrarySource: Hashable {
         case .applePhotos: return "Apple Photos"
         case .generated: return "Generated"
         case .playlists: return "Playlists"
+        case .messageCard: return "Message & QR"
         case .gallery(let name): return name
         }
     }
@@ -34,6 +38,7 @@ enum LibrarySource: Hashable {
     var symbol: String {
         switch self {
         case .currentPhoto: return "photo.on.rectangle.angled"
+        case .recentlyShown: return "clock.arrow.circlepath"
         case .localFolder: return "folder"
         case .browseFiles: return "folder.fill"
         case .museumCards: return "text.below.photo"
@@ -41,6 +46,7 @@ enum LibrarySource: Hashable {
         case .applePhotos: return "photo.on.rectangle"
         case .generated: return "sparkles"
         case .playlists: return "list.bullet.rectangle"
+        case .messageCard: return "qrcode"
         case .gallery: return "rectangle.stack"
         }
     }
@@ -204,7 +210,7 @@ final class LibraryModel: ObservableObject {
         isLoadingMore = false
 
         switch source {
-        case .currentPhoto, .generated, .browseFiles, .museumCards, .playlists:
+        case .currentPhoto, .recentlyShown, .generated, .browseFiles, .museumCards, .playlists, .messageCard:
             // .browseFiles has its own view (FileBrowserView) with its own
             // folder-navigation state — it never routes through this grid.
             items = []

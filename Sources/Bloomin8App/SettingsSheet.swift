@@ -239,6 +239,9 @@ struct SettingsSheet: View {
                 Section("Agenda") {
                     AgendaSettingsView(settings: settings)
                 }
+                Section("Countdown") {
+                    CountdownSettingsView(settings: settings)
+                }
                 Section("Weather") {
 
                     Text("Weather location: type a town or city and click Look Up, or edit the coordinates.")

@@ -35,6 +35,7 @@ struct Sidebar: View {
                 VStack(alignment: .leading, spacing: 16) {
                     sectionHeader("Frame")
                     row(.currentPhoto)
+                    row(.recentlyShown)
 
                     sectionHeader("Library")
                     if shouldShowLocalFolderRows {
@@ -46,6 +47,7 @@ struct Sidebar: View {
                     row(.applePhotos)
                     row(.generated)
                     row(.playlists)
+                    row(.messageCard)
 
                     galleriesHeader
                     ForEach(visibleGalleries, id: \.self) { name in

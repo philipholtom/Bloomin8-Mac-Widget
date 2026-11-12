@@ -405,6 +405,11 @@ public final class AppSettings: ObservableObject {
         didSet { AgendaOptions.store(agendaOptions, in: defaults) }
     }
 
+    /// The dates the Countdown card counts down to.
+    @Published public var countdownOptions: CountdownOptions {
+        didSet { CountdownOptions.store(countdownOptions, in: defaults) }
+    }
+
     public convenience init() {
         self.init(defaults: UserDefaults(suiteName: AppSettings.suiteName) ?? .standard)
     }
@@ -501,6 +506,7 @@ public final class AppSettings: ObservableObject {
         tmdbApiKey = SecretStore.read(account: MoviePosterSource.keyAccount) ?? ""
         moviePosterOptions = defaults.data(forKey: "moviePosterOptions").flatMap { try? JSONDecoder().decode(MoviePosterOptions.self, from: $0) } ?? MoviePosterOptions()
         agendaOptions = defaults.data(forKey: "agendaOptions").flatMap { try? JSONDecoder().decode(AgendaOptions.self, from: $0) } ?? AgendaOptions()
+        countdownOptions = defaults.data(forKey: "countdownOptions").flatMap { try? JSONDecoder().decode(CountdownOptions.self, from: $0) } ?? CountdownOptions()
         einkTuning = defaults.data(forKey: "einkTuning").flatMap { try? JSONDecoder().decode(EInkTuning.self, from: $0) } ?? EInkTuning()
 
         // `frameProfiles`'s own didSet does NOT fire for the assignment
