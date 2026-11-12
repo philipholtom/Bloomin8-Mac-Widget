@@ -236,6 +236,9 @@ struct SettingsSheet: View {
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
+                Section("Agenda") {
+                    AgendaSettingsView(settings: settings)
+                }
                 Section("Weather") {
 
                     Text("Weather location: type a town or city and click Look Up, or edit the coordinates.")
@@ -1273,7 +1276,7 @@ private enum SettingsCategory: String, CaseIterable, Identifiable, Hashable {
 
 /// A small (?) button that shows longer explanatory text in a popover, so
 /// settings rows stay one line.
-private struct InfoButton: View {
+struct InfoButton: View {
     let text: String
     @State private var shown = false
 

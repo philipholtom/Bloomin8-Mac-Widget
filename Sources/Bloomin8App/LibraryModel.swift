@@ -164,8 +164,14 @@ final class LibraryModel: ObservableObject {
         isShuffled = true
     }
 
-    func sortItemsByName() {
-        items.sort { ($0.url?.path ?? $0.name).localizedStandardCompare($1.url?.path ?? $1.name) == .orderedAscending }
+    /// Back to the source's own order: A–Z by path for a folder, the order
+    /// they were favourited in for Favorites.
+    func restoreOrder() {
+        if currentSource == .favorites {
+            items = settings.favoriteImagePaths.map { LibraryItem(localURL: URL(fileURLWithPath: $0)) }
+        } else {
+            items.sort { ($0.url?.path ?? $0.name).localizedStandardCompare($1.url?.path ?? $1.name) == .orderedAscending }
+        }
         isShuffled = false
     }
 

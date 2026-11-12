@@ -46,7 +46,7 @@ struct LibraryGrid: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             if library.currentSource == .applePhotos {
                 photosHeader
-            } else if library.currentSource == .localFolder, !library.items.isEmpty {
+            } else if (library.currentSource == .localFolder || library.currentSource == .favorites), !library.items.isEmpty {
                 localFolderHeader
             }
         }
@@ -395,10 +395,11 @@ struct LibraryGrid: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: - Local Folder header
+    // MARK: - Local Folder and Favorites header
 
-    /// Shuffle and Sort A–Z for the Local Folder grid. Shuffled, the photos
-    /// are mixed across every subfolder with no folder headings.
+    /// Shuffle and back-to-order buttons for the Local Folder and Favorites
+    /// grids. Shuffled, a folder's photos are mixed across every subfolder with
+    /// no folder headings.
     private var localFolderHeader: some View {
         HStack(spacing: 10) {
             Button {
@@ -406,15 +407,16 @@ struct LibraryGrid: View {
             } label: {
                 Label(library.isShuffled ? "Shuffle again" : "Shuffle", systemImage: "shuffle")
             }
-            .help("Show the photos in a random order, mixed across all subfolders")
+            .help("Show the photos in a random order")
 
             if library.isShuffled {
                 Button {
-                    library.sortItemsByName()
+                    library.restoreOrder()
                 } label: {
-                    Label("Sort A–Z", systemImage: "textformat.abc")
+                    Label(library.currentSource == .favorites ? "Original order" : "Sort A–Z",
+                          systemImage: library.currentSource == .favorites ? "arrow.uturn.backward" : "textformat.abc")
                 }
-                .help("Back to folder order")
+                .help(library.currentSource == .favorites ? "Back to the order you favourited them in" : "Back to folder order")
             }
             Spacer()
         }

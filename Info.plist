@@ -15,9 +15,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.37</string>
+	<string>1.38</string>
 	<key>CFBundleVersion</key>
-	<string>38</string>
+	<string>39</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>13.0</string>
 	<key>LSUIElement</key>
@@ -33,6 +33,10 @@
 	<array>
 		<string>_b8cards._tcp</string>
 	</array>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Bloomin8 Widget reads your calendar to draw the Agenda card for your photo frame.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Bloomin8 Widget reads your calendar to draw the Agenda card for your photo frame.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Bloomin8 Widget connects to your Bloomin8 photo frame over your local Wi-Fi network to show the current photo and display new ones.</string>
 </dict>

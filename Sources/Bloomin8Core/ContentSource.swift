@@ -80,6 +80,7 @@ public enum ContentSources {
         CatPhotoSource(),
         DogPhotoSource(),
         SatelliteMapSource(),
-        MoviePosterSource()
+        MoviePosterSource(),
+        AgendaSource()
     ]
 }
