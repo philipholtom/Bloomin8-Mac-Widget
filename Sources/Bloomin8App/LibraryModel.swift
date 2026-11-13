@@ -19,6 +19,20 @@ enum LibrarySource: Hashable {
     case messageCard
     case gallery(String)
 
+    /// Key into `AppSettings.lockedSources`, for sources that can be locked.
+    var lockKey: String? {
+        switch self {
+        case .localFolder: return "localFolder"
+        case .browseFiles: return "browseFiles"
+        case .museumCards: return "museumCards"
+        case .favorites: return "favorites"
+        case .applePhotos: return "applePhotos"
+        default: return nil
+        }
+    }
+
+    static let lockableSources: [LibrarySource] = [.localFolder, .browseFiles, .museumCards, .favorites, .applePhotos]
+
     var title: String {
         switch self {
         case .currentPhoto: return "On the Frame"

@@ -38,13 +38,11 @@ struct Sidebar: View {
                     row(.recentlyShown)
 
                     sectionHeader("Library")
-                    if shouldShowLocalFolderRows {
-                        row(.localFolder, isLocked: isLocalFolderLocked)
-                        row(.browseFiles, isLocked: isLocalFolderLocked)
-                        row(.museumCards, badge: cardStore.snapshot.cards.count, isLocked: isLocalFolderLocked)
-                        row(.favorites, badge: settings.favoriteImagePaths.count, isLocked: isLocalFolderLocked)
-                    }
-                    row(.applePhotos)
+                    if showsLockable(.localFolder) { row(.localFolder, isLocked: isLockedNow(.localFolder)) }
+                    if showsLockable(.browseFiles) { row(.browseFiles, isLocked: isLockedNow(.browseFiles)) }
+                    if showsLockable(.museumCards) { row(.museumCards, badge: cardStore.snapshot.cards.count, isLocked: isLockedNow(.museumCards)) }
+                    if showsLockable(.favorites) { row(.favorites, badge: settings.favoriteImagePaths.count, isLocked: isLockedNow(.favorites)) }
+                    if showsLockable(.applePhotos) { row(.applePhotos, isLocked: isLockedNow(.applePhotos)) }
                     row(.generated)
                     row(.playlists)
                     row(.messageCard)
@@ -184,8 +182,9 @@ struct Sidebar: View {
         settings.lockedTab(for: galleryName, unlockedTabIDs: controller.unlockedTabIDs)
     }
 
-    private var isLocalFolderLocked: Bool {
-        settings.localFolderLocked && !controller.isLocalFolderUnlocked
+    private func isLockedNow(_ source: LibrarySource) -> Bool {
+        guard let key = source.lockKey else { return false }
+        return settings.isSourceLocked(key) && !controller.isLocalFolderUnlocked
     }
 
     /// Hidden from the sidebar entirely — not just locked — while
@@ -194,8 +193,8 @@ struct Sidebar: View {
     /// actually open), and it stays visible once unlocked without needing
     /// ⌘⇧L again. An unprotected Local Folder/Favorites is unaffected and
     /// always shows.
-    private var shouldShowLocalFolderRows: Bool {
-        !settings.localFolderLocked || controller.isLocalFolderUnlocked || controller.showHiddenTabs
+    private func showsLockable(_ source: LibrarySource) -> Bool {
+        !isLockedNow(source) || controller.showHiddenTabs
     }
 
     /// A plain tappable row rather than `List(selection:)`. That binding

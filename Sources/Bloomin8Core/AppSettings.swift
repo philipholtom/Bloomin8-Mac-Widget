@@ -350,6 +350,21 @@ public final class AppSettings: ObservableObject {
         didSet { defaults.set(localFolderLocked, forKey: "localFolderLocked") }
     }
 
+    /// Which library sources sit behind the lock when a password is set.
+    /// Keys: localFolder, browseFiles, museumCards, favorites, applePhotos.
+    /// Defaults to the four local-file ones (the original behaviour); Apple
+    /// Photos is opt-in. One password and one unlock cover all of them.
+    public static let lockableSourceKeys = ["localFolder", "browseFiles", "museumCards", "favorites", "applePhotos"]
+    public static let defaultLockedSources: Set<String> = ["localFolder", "browseFiles", "museumCards", "favorites"]
+    @Published public var lockedSources: Set<String> {
+        didSet { defaults.set(Array(lockedSources).sorted(), forKey: "lockedSources") }
+    }
+
+    /// Whether this source is behind the password (ignoring whether it has been unlocked this session).
+    public func isSourceLocked(_ key: String) -> Bool {
+        localFolderLocked && lockedSources.contains(key)
+    }
+
     /// Hash of the Local Folder password (nil if not locked). Lives in
     /// the secret store, not this UserDefaults suite — the suite's own doc comment
     /// above explains why it can't have real access-group protection
@@ -408,6 +423,11 @@ public final class AppSettings: ObservableObject {
     /// The dates the Countdown card counts down to.
     @Published public var countdownOptions: CountdownOptions {
         didSet { CountdownOptions.store(countdownOptions, in: defaults) }
+    }
+
+    /// A mat or border drawn around each photo before it's sent.
+    @Published public var frameStyle: FrameStyle {
+        didSet { FrameStyle.store(frameStyle, in: defaults) }
     }
 
     public convenience init() {
@@ -487,6 +507,7 @@ public final class AppSettings: ObservableObject {
         randomFolderPath = defaults.string(forKey: "randomFolderPath") ?? ""
         browseFilesRootPath = defaults.string(forKey: "browseFilesRootPath") ?? ""
         localFolderLocked = defaults.bool(forKey: "localFolderLocked")
+        lockedSources = (defaults.stringArray(forKey: "lockedSources")).map(Set.init) ?? Self.defaultLockedSources
         if let fromStore = SecretStore.read(account: Self.localFolderPasswordAccount) {
             Self.log.notice("localFolderPasswordHash: read from the secret store")
             localFolderPasswordHash = fromStore
@@ -507,6 +528,7 @@ public final class AppSettings: ObservableObject {
         moviePosterOptions = defaults.data(forKey: "moviePosterOptions").flatMap { try? JSONDecoder().decode(MoviePosterOptions.self, from: $0) } ?? MoviePosterOptions()
         agendaOptions = defaults.data(forKey: "agendaOptions").flatMap { try? JSONDecoder().decode(AgendaOptions.self, from: $0) } ?? AgendaOptions()
         countdownOptions = defaults.data(forKey: "countdownOptions").flatMap { try? JSONDecoder().decode(CountdownOptions.self, from: $0) } ?? CountdownOptions()
+        frameStyle = defaults.data(forKey: "frameStyle").flatMap { try? JSONDecoder().decode(FrameStyle.self, from: $0) } ?? FrameStyle()
         einkTuning = defaults.data(forKey: "einkTuning").flatMap { try? JSONDecoder().decode(EInkTuning.self, from: $0) } ?? EInkTuning()
 
         // `frameProfiles`'s own didSet does NOT fire for the assignment

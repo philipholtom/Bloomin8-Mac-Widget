@@ -196,7 +196,7 @@ extension PhotoController {
         let rendered: [(filename: String, data: Data)?] = await Task.detached(priority: .userInitiated) { [weak self] in
             items.map { item in
                 guard let cgImage = loadUprightCGImage(data: item.data),
-                      let framed = self?.renderForFrame(cgImage: cgImage, width: width, height: height, cropLandscapePhotos: crop),
+                      let framed = self?.renderForFrame(cgImage: cgImage, width: width, height: height, cropLandscapePhotos: crop, caption: FrameCaption.read(data: item.data)),
                       let jpeg = ImageCanvas.jpegData(framed)
                 else { return nil }
                 return (item.filename, jpeg)

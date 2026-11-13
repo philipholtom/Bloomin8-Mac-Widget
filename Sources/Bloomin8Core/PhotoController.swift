@@ -501,7 +501,7 @@ public final class PhotoController: ObservableObject {
                 let rendered: [Data?] = await Task.detached(priority: .userInitiated) { [weak self] in
                     batchURLs.map { url in
                         guard let cgImage = loadUprightCGImage(at: url),
-                              let framed = self?.renderForFrame(cgImage: cgImage, width: renderWidth, height: renderHeight, cropLandscapePhotos: cropLandscapePhotos)
+                              let framed = self?.renderForFrame(cgImage: cgImage, width: renderWidth, height: renderHeight, cropLandscapePhotos: cropLandscapePhotos, caption: FrameCaption.read(url: url))
                         else { return nil }
                         return ImageCanvas.jpegData(framed)
                     }
@@ -1481,11 +1481,18 @@ public final class PhotoController: ObservableObject {
     /// inside `Task.detached` off the main actor, so this can't be
     /// `@MainActor`-isolated the way an ordinary instance method would be by
     /// default.
-    nonisolated func renderForFrame(cgImage: CGImage, width: Int, height: Int, cropLandscapePhotos: Bool) -> NSImage? {
+    nonisolated func renderForFrame(cgImage: CGImage, width: Int, height: Int, cropLandscapePhotos: Bool, caption: FrameCaption? = nil) -> NSImage? {
         // Tuned before framing, so the black letterbox bars aren't pushed
         // around by the contrast/brightness adjustments. A no-op by default.
         let source = EInkTuner.apply(EInkTuning.stored(), to: cgImage)
         let isLandscape = source.width > source.height
+        // A mat or border, if one is set: the photo goes inside it and the
+        // mat takes the place of the black bars.
+        let style = FrameStyle.stored()
+        if !style.isNone,
+           let matted = FrameStyler.compose(source, style: style, width: width, height: height, fill: cropLandscapePhotos && isLandscape, caption: caption) {
+            return matted
+        }
         if cropLandscapePhotos, isLandscape {
             return renderFilled(cgImage: source, width: width, height: height)
         }
@@ -1535,7 +1542,7 @@ public final class PhotoController: ObservableObject {
         guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path) else { return nil }
         let modified = (attrs[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
         let size = (attrs[.size] as? NSNumber)?.int64Value ?? 0
-        var text = "\(url.path)|\(modified)|\(size)|\(cropLandscapePhotos)|\(width)x\(height)" + EInkTuning.stored().fingerprint
+        var text = "\(url.path)|\(modified)|\(size)|\(cropLandscapePhotos)|\(width)x\(height)" + EInkTuning.stored().fingerprint + FrameStyle.stored().fingerprint
         // Appended only for an explicit crop, so photos sent without one keep
         // exactly the key (and so the on-frame filename) they always had.
         if let crop { text += "|crop:\(crop.keyDescription)" }
@@ -1543,7 +1550,7 @@ public final class PhotoController: ObservableObject {
     }
 
     nonisolated static func sourceKey(forPhotosAsset id: String, cropLandscapePhotos: Bool, width: Int, height: Int) -> String {
-        shortHash("photos|\(id)|\(cropLandscapePhotos)|\(width)x\(height)" + EInkTuning.stored().fingerprint)
+        shortHash("photos|\(id)|\(cropLandscapePhotos)|\(width)x\(height)" + EInkTuning.stored().fingerprint + FrameStyle.stored().fingerprint)
     }
 
     nonisolated private static func shortHash(_ text: String) -> String {
@@ -1614,7 +1621,7 @@ public final class PhotoController: ObservableObject {
 
             for chosen in chosenURLs {
                 guard let cgImage = loadUprightCGImage(at: chosen),
-                      let framed = self?.renderForFrame(cgImage: cgImage, width: renderWidth, height: renderHeight, cropLandscapePhotos: cropLandscapePhotos),
+                      let framed = self?.renderForFrame(cgImage: cgImage, width: renderWidth, height: renderHeight, cropLandscapePhotos: cropLandscapePhotos, caption: FrameCaption.read(url: chosen)),
                       let jpeg = ImageCanvas.jpegData(framed)
                 else {
                     continue
@@ -1810,7 +1817,7 @@ public final class PhotoController: ObservableObject {
     /// Loads and prepares a specific image from a file path for display/upload.
     public func prepareBrowsedImage(url: URL) {
         guard let cgImage = loadUprightCGImage(at: url),
-              let framed = renderForFrame(cgImage: cgImage, width: settings.renderWidth, height: settings.renderHeight, cropLandscapePhotos: settings.cropLandscapePhotos),
+              let framed = renderForFrame(cgImage: cgImage, width: settings.renderWidth, height: settings.renderHeight, cropLandscapePhotos: settings.cropLandscapePhotos, caption: FrameCaption.read(url: url)),
               let jpeg = ImageCanvas.jpegData(framed)
         else {
             statusText = "Couldn't read '\(url.lastPathComponent)'."
@@ -1846,7 +1853,7 @@ public final class PhotoController: ObservableObject {
     /// colons, or spaces in a filename.
     public func preparePhotosLibraryImage(data: Data, displayName: String, assetID: String? = nil) {
         guard let cgImage = loadUprightCGImage(data: data),
-              let framed = renderForFrame(cgImage: cgImage, width: settings.renderWidth, height: settings.renderHeight, cropLandscapePhotos: settings.cropLandscapePhotos),
+              let framed = renderForFrame(cgImage: cgImage, width: settings.renderWidth, height: settings.renderHeight, cropLandscapePhotos: settings.cropLandscapePhotos, caption: FrameCaption.read(data: data)),
               let jpeg = ImageCanvas.jpegData(framed)
         else {
             statusText = "Couldn't process that photo."
@@ -1872,7 +1879,7 @@ public final class PhotoController: ObservableObject {
         let rendered: [(image: NSImage, jpeg: Data, displayName: String, assetID: String, metadata: PhotoMetadata?)] = await Task.detached(priority: .userInitiated) { [weak self] in
             items.compactMap { item in
                 guard let cgImage = loadUprightCGImage(data: item.data),
-                      let framed = self?.renderForFrame(cgImage: cgImage, width: width, height: height, cropLandscapePhotos: crop),
+                      let framed = self?.renderForFrame(cgImage: cgImage, width: width, height: height, cropLandscapePhotos: crop, caption: FrameCaption.read(data: item.data)),
                       let jpeg = ImageCanvas.jpegData(framed)
                 else { return nil }
                 return (framed, jpeg, item.displayName, item.assetID, PhotoMetadata.read(from: item.data))

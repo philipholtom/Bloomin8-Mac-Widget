@@ -68,7 +68,7 @@ final class PrivacyBlur: ObservableObject {
         if let gallery, settings.tabs.contains(where: { $0.isLocked && $0.galleryNames.contains(gallery) }) {
             return true
         }
-        return isLocalFile && settings.localFolderLocked
+        return isLocalFile && ["localFolder", "browseFiles", "favorites"].contains { settings.isSourceLocked($0) }
     }
 
     // MARK: - Pixelation

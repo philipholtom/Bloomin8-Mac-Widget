@@ -150,6 +150,9 @@ struct SettingsSheet: View {
                             .font(.caption)
                     }
                 }
+                Section("Mats & borders") {
+                    FrameStyleView(settings: settings, controller: controller)
+                }
                 Section("Tune for e-ink") {
                     EInkTuningView(settings: settings, controller: controller)
                 }
@@ -1083,8 +1086,22 @@ struct SettingsSheet: View {
                     .disabled(unlockPasswordDraft.isEmpty)
             }
         } else {
+            Section("Locked Library Sources") {
+                ForEach(LibrarySource.lockableSources, id: \.self) { source in
+                    if let key = source.lockKey {
+                        Toggle(source.title, isOn: Binding(
+                            get: { settings.lockedSources.contains(key) },
+                            set: { on in
+                                if on { settings.lockedSources.insert(key) } else { settings.lockedSources.remove(key) }
+                            }
+                        ))
+                        .toggleStyle(.checkbox)
+                    }
+                }
+            }
+
             Section("Locked Galleries · \(activeProfileName)") {
-                Text("Ticked galleries are hidden in the sidebar until you unlock them (⌘⇧L, then your password). Local Folder and Favorites are always locked.")
+                Text("Ticked galleries are hidden in the sidebar until you unlock them (⌘⇧L, then your password). Tick the library sources below to lock them too; one password and one unlock cover everything.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if controller.galleries.isEmpty {

@@ -225,7 +225,7 @@ struct CurrentPhotoPane: View {
                 } label: {
                     Label("On this day", systemImage: "calendar").frame(maxWidth: .infinity)
                 }
-                .disabled(controller.isBusy)
+                .disabled(controller.isBusy || isLocked("applePhotos"))
                 .help("Photos from your Photos library taken on today's date in earlier years — pick one of 3")
 
                 Button {
@@ -241,10 +241,10 @@ struct CurrentPhotoPane: View {
                 } label: {
                     Label("From favourites", systemImage: "star").frame(maxWidth: .infinity)
                 }
-                .disabled(controller.isBusy || settings.favoriteImagePaths.isEmpty || isLocalFolderLocked)
+                .disabled(controller.isBusy || settings.favoriteImagePaths.isEmpty || isFavoritesLocked)
                 .help(settings.favoriteImagePaths.isEmpty
                     ? "No favourites yet"
-                    : (isLocalFolderLocked ? "Favourites are locked — unlock them from the sidebar first" : "Picks 3 random favourites to choose from, with Next for 3 more"))
+                    : (isFavoritesLocked ? "Favourites are locked — unlock them from the sidebar first" : "Picks 3 random favourites to choose from, with Next for 3 more"))
             }
             .controlSize(.large)
             .padding(8)
@@ -486,8 +486,10 @@ struct CurrentPhotoPane: View {
     /// check) — this button reaches the same content from outside that
     /// view, so it needs the same gate rather than offering a side door
     /// around the password/Touch ID prompt.
-    private var isLocalFolderLocked: Bool {
-        settings.localFolderLocked && !controller.isLocalFolderUnlocked
+    private var isLocalFolderLocked: Bool { isLocked("localFolder") }
+    private var isFavoritesLocked: Bool { isLocked("favorites") }
+    private func isLocked(_ key: String) -> Bool {
+        settings.isSourceLocked(key) && !controller.isLocalFolderUnlocked
     }
 
     private var localFolderButtonHelp: String {
