@@ -42,6 +42,19 @@ public final class BLEWaker: NSObject {
     private var pendingServices = 0
     private var loggedNames = Set<String>()
 
+    /// The frame advertises its 0xFFF0 service, so a scan filtered to it finds
+    /// the frame faster and more reliably than listening to everything. If it
+    /// isn't seen in this long (a sleeping frame might advertise differently),
+    /// fall back to scanning for any device and matching on the name.
+    private static let advertisedServiceUUID = CBUUID(string: "FFF0")
+    private static let filteredScanSeconds: TimeInterval = 6
+    private var fallbackTask: Task<Void, Never>?
+    private var usedFallback = false
+    private var startedAt = Date()
+    private var foundAt: Date?
+    private var connectedAt: Date?
+    private var foundRSSI: Int?
+
     /// Scans for a BLE peripheral advertising `deviceName`, connects, and writes
     /// a wake pulse to its known characteristic. Returns true once the pulse was
     /// sent — not a guarantee the frame actually woke, just that the BLE side of
@@ -61,6 +74,11 @@ public final class BLEWaker: NSObject {
         isPulsing = false
         pendingServices = 0
         loggedNames.removeAll()
+        usedFallback = false
+        startedAt = Date()
+        foundAt = nil
+        connectedAt = nil
+        foundRSSI = nil
 
         Self.log.notice("wake: start, target='\(deviceName, privacy: .public)' scanTimeout=\(scanTimeout)s")
         return await withCheckedContinuation { cont in
@@ -89,6 +107,14 @@ public final class BLEWaker: NSObject {
         continuation = nil
         timeoutTask?.cancel()
         timeoutTask = nil
+        fallbackTask?.cancel()
+        fallbackTask = nil
+        let now = Date()
+        WakeHistory.record(WakeRecord(
+            date: startedAt, succeeded: success, deviceName: targetName, rssi: foundRSSI,
+            foundSeconds: foundAt.map { $0.timeIntervalSince(startedAt) },
+            connectedSeconds: connectedAt.map { $0.timeIntervalSince(startedAt) },
+            totalSeconds: now.timeIntervalSince(startedAt), usedFallbackScan: usedFallback))
         centralManager?.stopScan()
         if let peripheral = targetPeripheral {
             centralManager?.cancelPeripheralConnection(peripheral)
@@ -130,8 +156,17 @@ extension BLEWaker: @MainActor CBCentralManagerDelegate {
     public func centralManagerDidUpdateState(_ central: CBCentralManager) {
         switch central.state {
         case .poweredOn:
-            Self.log.notice("central: poweredOn, scanning")
-            central.scanForPeripherals(withServices: nil, options: nil)
+            Self.log.notice("central: poweredOn, scanning for service FFF0")
+            central.scanForPeripherals(withServices: [Self.advertisedServiceUUID], options: nil)
+            fallbackTask?.cancel()
+            fallbackTask = Task {
+                try? await Task.sleep(nanoseconds: UInt64(Self.filteredScanSeconds * 1_000_000_000))
+                guard !Task.isCancelled, self.continuation != nil, self.targetPeripheral == nil else { return }
+                Self.log.notice("scan: not seen in \(Self.filteredScanSeconds)s with the service filter, scanning for any device")
+                self.usedFallback = true
+                self.centralManager?.stopScan()
+                self.centralManager?.scanForPeripherals(withServices: nil, options: nil)
+            }
         case .unauthorized:
             Self.log.error("central: unauthorized — Bluetooth permission denied for this app")
             finish(false)
@@ -159,6 +194,9 @@ extension BLEWaker: @MainActor CBCentralManagerDelegate {
         Self.log.notice("scan: MATCH '\(name, privacy: .public)' rssi=\(RSSI.intValue) advServices=\(services, privacy: .public)")
 
         central.stopScan()
+        fallbackTask?.cancel()
+        foundAt = Date()
+        foundRSSI = RSSI.intValue
         targetPeripheral = peripheral
         peripheral.delegate = self
         armTimeout(Self.connectTimeout, phase: "connect")
@@ -166,6 +204,7 @@ extension BLEWaker: @MainActor CBCentralManagerDelegate {
     }
 
     public func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        connectedAt = Date()
         Self.log.notice("connect: ok, discovering services")
         peripheral.discoverServices(nil)
     }

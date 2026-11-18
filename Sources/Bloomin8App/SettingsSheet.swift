@@ -104,6 +104,9 @@ struct SettingsSheet: View {
                 Section("Status and controls · \(activeProfileName)") {
                     FrameControlsView(controller: controller)
                 }
+                Section("Bluetooth wake history") {
+                    WakeHistoryView()
+                }
                     case .photos:
                 Section("Photos") {
                     HStack {

@@ -82,6 +82,7 @@ public enum ContentSources {
         SatelliteMapSource(),
         MoviePosterSource(),
         AgendaSource(),
-        CountdownSource()
+        CountdownSource(),
+        MorningDashboardSource()
     ]
 }

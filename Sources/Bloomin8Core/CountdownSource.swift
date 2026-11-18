@@ -80,6 +80,10 @@ public struct CountdownSource: TodayContentSource {
     public struct Upcoming: Equatable {
         public let event: CountdownEvent
         public let days: Int
+        public init(event: CountdownEvent, days: Int) {
+            self.event = event
+            self.days = days
+        }
     }
 
     /// Events from today onwards, soonest first, each with its whole days to go.

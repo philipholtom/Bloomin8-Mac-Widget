@@ -157,7 +157,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let c = settings.storedActiveProfile()?.scheduledContent, c.isEnabled, !c.days.isEmpty,
                       c.sourceID != ScheduledContent.onThisDayPhotosSourceID,
                       // Calendar access is granted per app; without it here, leave the agenda to the app.
-                      c.sourceID != AgendaSource.sourceID || AgendaCalendars.isAuthorized else { return nil }
+                      (c.sourceID != AgendaSource.sourceID && c.sourceID != MorningDashboardSource.sourceID) || AgendaCalendars.isAuthorized else { return nil }
                 return ScheduleTiming(days: c.days, timeMinutes: c.timeMinutes)
             },
             run: {
