@@ -7,6 +7,8 @@ public final class PhotoController: ObservableObject {
     public let settings: AppSettings
     let client = BloominClient()
     private let bleWaker = BLEWaker()
+    /// Frame paths whose upload failed part-way and may still have landed — see `uploadWithRetries`.
+    private var uploadsNeedingCheck = Set<String>()
 
     @Published public var previewImage: NSImage?
     /// Raw bytes behind `previewImage`, kept alongside it so "Save Photo"
@@ -2041,20 +2043,71 @@ public final class PhotoController: ObservableObject {
         await client.ensureGallery(ip: settings.deviceIP, name: gallery)
         statusText = "← /gallery OK"
 
+        let path = "/gallerys/\(gallery)/\(filename)"
+        // A failed attempt may still have reached the frame (it can be slow to
+        // answer yet keep receiving). Sending the same file again while the
+        // first copy is still being written or drawn corrupts it, so after any
+        // failure look at what the frame holds before sending anything more —
+        // including when this whole function is called again after a wake.
+        var mayHaveLanded = uploadsNeedingCheck.contains(path)
         var lastError: Error = BloominError.badResponse("Upload failed after 3 attempts")
         for attempt in 1...3 {
+            if mayHaveLanded, await frameAlreadyHolds(path: path, expected: imageData) {
+                uploadsNeedingCheck.remove(path)
+                statusText = "Frame already has \(filename) — making sure it's showing"
+                await ensureDisplayed(path: path)
+                return path
+            }
             do {
                 statusText = "→ POST /upload?filename=\(filename)&gallery=\(gallery)&show_now=1\n📦 \(fileSizeKB)KB [Attempt \(attempt)/3]"
-                return try await client.uploadImage(ip: settings.deviceIP, filename: filename, gallery: gallery, imageData: imageData, showNow: true)
+                let stored = try await client.uploadImage(ip: settings.deviceIP, filename: filename, gallery: gallery, imageData: imageData, showNow: true)
+                uploadsNeedingCheck.remove(path)
+                if mayHaveLanded { await ensureDisplayed(path: stored) }
+                return stored
             } catch {
                 lastError = error
+                mayHaveLanded = true
+                uploadsNeedingCheck.insert(path)
                 statusText = "← /upload failed (attempt \(attempt)/3): \(error.localizedDescription)"
                 if attempt < 3 {
-                    try await Task.sleep(nanoseconds: UInt64(attempt) * 1_000_000_000) // Wait 1-2 seconds before retry
+                    // Long enough for a copy still in flight to finish writing.
+                    try await Task.sleep(nanoseconds: 8_000_000_000)
                 }
             }
         }
         throw lastError
+    }
+
+    /// True when the frame already has exactly these bytes at `path`.
+    private func frameAlreadyHolds(path: String, expected: Data) async -> Bool {
+        guard let data = try? await client.fetchImageData(ip: settings.deviceIP, path: path) else { return false }
+        return data == expected
+    }
+
+    /// After an upload that needed a retry, reads the frame's log until it
+    /// says the picture was drawn, and asks it to show the picture again if
+    /// the display step failed or never started. Best effort: errors reading
+    /// the log are ignored.
+    private func ensureDisplayed(path: String) async {
+        for check in 1...4 {
+            try? await Task.sleep(nanoseconds: 15_000_000_000)
+            guard let files = try? await client.fetchLogList(ip: settings.deviceIP),
+                  let latest = files.map(\.name).max(),
+                  let log = try? await client.fetchLogContent(ip: settings.deviceIP, filename: latest) else { continue }
+            switch FrameLogCheck.displayState(in: log, path: path) {
+            case .shown:
+                return
+            case .failed:
+                logActivity("The frame couldn't draw \((path as NSString).lastPathComponent) — showing it again", success: false)
+                try? await client.show(ip: settings.deviceIP, imagePath: path)
+                return
+            case .pending:
+                if check == 4 {
+                    logActivity("The frame hadn't drawn \((path as NSString).lastPathComponent) after a minute — showing it again", success: false)
+                    try? await client.show(ip: settings.deviceIP, imagePath: path)
+                }
+            }
+        }
     }
 
     /// Deletes the entire Random gallery from the device.
